@@ -6,9 +6,12 @@ const { Server } = require('socket.io');
 const { initializeDatabase } = require('./db');
 const app = express();
 const server = createServer(app);
+
+// Normalize to avoid CORS mismatches like trailing slashes
+const normalizedFrontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: normalizedFrontendUrl,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
   }
@@ -74,7 +77,7 @@ initializeDatabase().then(() => {
   
   // Enable CORS for all routes
   app.use(cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: normalizedFrontendUrl,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
