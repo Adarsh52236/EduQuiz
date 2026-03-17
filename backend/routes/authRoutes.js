@@ -132,13 +132,14 @@ router.post('/signin', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // **Role Verification**
+    // Role verification
+    //
+    // Industry-standard security practice is to avoid revealing whether an account exists
+    // (or what role it is) when authentication fails, to reduce account enumeration.
+    // Treat role mismatch as a generic auth failure.
     if (user.role !== role) {
-      const portal = user.role === 'teacher' ? 'Teacher' : 'Student';
-      // Construct a very specific error message
-      const errorMessage = `Login failed: This account is registered as a '${user.role}'. Please use the ${portal} login page. You attempted to log in as a '${role}'.`;
       console.log(`Role mismatch for ${email}: Expected '${role}', but found '${user.role}'.`);
-      return res.status(403).json({ message: errorMessage });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Verify password

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/config/api';
 
 interface Notification {
   id: string;
@@ -39,7 +40,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
     const token = localStorage.getItem('token');
-    const response = await fetch(url, {
+    const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -49,6 +50,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
 
     if (!response.ok) {
+      // Backend should return JSON; if it doesn't, fall back to statusText.
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       throw new Error(errorData.message || 'Request failed');
     }
@@ -66,6 +68,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setUnreadCount(data.unreadCount || 0);
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
+      // Keep this non-alarming; notifications are non-critical.
+      // Avoid spamming a toast on every poll.
     } finally {
       setLoading(false);
     }
@@ -80,7 +84,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       // Show toasts for new notifications
       newNotifications.forEach((notif: any) => {
-        toast.info(notif.message, {
+        toast.message(notif.message, {
           action: notif.link ? {
             label: 'View',
             onClick: () => window.location.href = notif.link,

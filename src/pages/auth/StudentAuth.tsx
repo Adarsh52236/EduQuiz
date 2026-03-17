@@ -135,30 +135,11 @@ export default function StudentAuth() {
       setTimeout(() => navigate('/student/dashboard'), 1000);
     } catch (error: any) {
       console.error('Signin error:', error);
-      // Enhanced error handling for role-based login restrictions
-      if (error.message && error.message.includes('registered as a')) {
-        // Extract role information from backend error message
-        const roleMatch = error.message.match(/registered as a '([^']+)'/);
-        const attemptedRole = error.message.match(/attempted to log in as a '([^']+)'/);
-        
-        if (roleMatch && roleMatch[1] === 'teacher') {
-          toast.error(
-            <div>
-              <div className="font-semibold mb-1">Wrong Portal!</div>
-              <div>This account is registered as a Teacher.</div>
-              <div className="text-sm mt-1">Please use the Teacher Portal instead.</div>
-            </div>,
-            { duration: 5000 }
-          );
-        } else {
-          toast.error(error.message, { duration: 5000 });
-        }
-      } else if (error.message && error.message.includes('already exists')) {
+      if (error.message && error.message.includes('already exists')) {
         toast.error('An account with this email already exists. Please sign in instead.');
-      } else if (error.message && error.message.includes('Invalid email or password')) {
-        toast.error('Invalid email or password. Please check your credentials.');
       } else {
-        toast.error(error.message || 'An unexpected error occurred. Please try again.');
+        // Avoid revealing whether the account exists or its role (prevents enumeration).
+        toast.error('Sign in failed. Please check your email and password, or use the correct portal.');
       }
     } finally {
       setIsLoading(false);
