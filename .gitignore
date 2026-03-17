@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Certificates / keys (often contain secrets)
+*.pem
+*.key
+
+# Build output
+dist/
+build/
+
+# Logs and debug
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Vite
+*.local
+
+# Optional: uncomment if you use them
+# .env.production
+# .env.development
