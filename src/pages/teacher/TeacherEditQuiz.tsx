@@ -115,8 +115,8 @@ export function TeacherEditQuiz() {
           type: quiz.type, // Added type
           timeLimit: quiz.timeLimit,
           totalPoints: quiz.totalPoints, // Added totalPoints
-          startTime: quiz.startTime, // Added startTime
-          endTime: quiz.endTime,     // Added endTime
+          startTime: quiz.startTime ? new Date(quiz.startTime).toISOString() : null, // Normalized for consistent server parsing
+          endTime: quiz.endTime ? new Date(quiz.endTime).toISOString() : null,
           isPublished: quiz.isPublished
         }),
       });

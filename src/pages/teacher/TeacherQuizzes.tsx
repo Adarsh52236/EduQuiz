@@ -113,8 +113,8 @@ export default function TeacherQuizzes() {
         body: JSON.stringify({
           ...newQuiz,
           teacherId: user.id,
-          startTime: newQuiz.startTime || null, // Ensure null if empty
-          endTime: newQuiz.endTime || null,     // Ensure null if empty
+          startTime: newQuiz.startTime ? new Date(newQuiz.startTime).toISOString() : null,
+          endTime: newQuiz.endTime ? new Date(newQuiz.endTime).toISOString() : null,
           totalPoints: newQuiz.totalPoints || 0,
         })
       });

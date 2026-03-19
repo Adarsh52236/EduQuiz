@@ -170,8 +170,8 @@ export default function QuizEditor() {
             type: quiz.type,
             timeLimit: quiz.timeLimit,
             totalPoints: calculateTotalPoints(), // Send calculated total points
-            startTime: quiz.startTime || null,
-            endTime: quiz.endTime || null,
+            startTime: quiz.startTime ? new Date(quiz.startTime).toISOString() : null,
+            endTime: quiz.endTime ? new Date(quiz.endTime).toISOString() : null,
             isPublished: quiz.isPublished,
             classId: quiz.classId || null,
           })
@@ -193,8 +193,8 @@ export default function QuizEditor() {
             type: quiz.type,
             timeLimit: quiz.timeLimit,
             totalPoints: calculateTotalPoints(), // Send calculated total points
-            startTime: quiz.startTime || null,
-            endTime: quiz.endTime || null,
+            startTime: quiz.startTime ? new Date(quiz.startTime).toISOString() : null,
+            endTime: quiz.endTime ? new Date(quiz.endTime).toISOString() : null,
             isPublished: quiz.isPublished,
             classId: quiz.classId || null,
           })

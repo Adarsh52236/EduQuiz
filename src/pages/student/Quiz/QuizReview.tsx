@@ -29,6 +29,7 @@ interface QuizReviewData {
   percentage: number;
   submittedAt: string;
   timeTaken: number;
+  timeUtilizationPercent: number | null;
   questions: QuestionReview[];
 }
 
@@ -173,6 +174,12 @@ const QuizReview = () => {
       ? (attempt.score / attempt.totalPoints) * 100 
       : 0;
 
+    const timeLimitMinutes: number | null = quiz.timeLimit ?? null;
+    const timeUtilizationPercent =
+      timeLimitMinutes && timeLimitMinutes > 0
+        ? Math.round((attempt.timeTaken / (timeLimitMinutes * 60)) * 100)
+        : null;
+
     setReviewData({
       quizId: quiz.id,
       quizTitle: quiz.title,
@@ -182,6 +189,7 @@ const QuizReview = () => {
       percentage: Math.round(percentage),
       submittedAt: attempt.submittedAt,
       timeTaken: attempt.timeTaken,
+      timeUtilizationPercent,
       questions: questionsWithAnswers
     });
   };
@@ -237,6 +245,12 @@ const QuizReview = () => {
           <div className="mt-4 text-sm text-muted-foreground">
             Submitted: {new Date(reviewData.submittedAt).toLocaleString()} • 
             Time Taken: {Math.round(reviewData.timeTaken / 60)} minutes
+            {reviewData.timeUtilizationPercent !== null && (
+              <>
+                {' '}
+                • Time Utilization: {reviewData.timeUtilizationPercent}%
+              </>
+            )}
           </div>
         </CardHeader>
         <CardContent>

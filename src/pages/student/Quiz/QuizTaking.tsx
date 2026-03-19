@@ -46,6 +46,7 @@ const QuizTaking = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [attemptStartedAt, setAttemptStartedAt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuizClosed, setIsQuizClosed] = useState(false);
   
@@ -66,24 +67,31 @@ const QuizTaking = () => {
     };
   }, [quizId]);
 
-  // Timer countdown
+  // Timer countdown (drift-free):
+  // We compute remaining time from the backend-provided `attemptStartedAt`
+  // instead of decrementing a local counter (which breaks when the tab sleeps).
   useEffect(() => {
-    if (timeLeft > 0 && !isSubmitting) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      
-      return () => {
-        if (timerRef.current) clearInterval(timerRef.current);
-      };
-    }
-  }, [timeLeft, isSubmitting]);
+    if (!attemptStartedAt || !quiz?.timeLimit || quiz.timeLimit <= 0 || isSubmitting) return;
+
+    const computeRemainingSeconds = () => {
+      const startedMs = new Date(attemptStartedAt).getTime();
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+      const totalSeconds = quiz.timeLimit * 60;
+      return Math.max(0, totalSeconds - elapsedSeconds);
+    };
+
+    // Initial sync immediately.
+    setTimeLeft(computeRemainingSeconds());
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimeLeft(computeRemainingSeconds());
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [attemptStartedAt, quiz?.timeLimit, isSubmitting]);
 
   // Auto-submit when time runs out
   useEffect(() => {
@@ -223,13 +231,11 @@ const QuizTaking = () => {
       const attemptData = await attemptResponse.json();
       console.log('[QuizTaking] Attempt started:', attemptData.id);
       setAttemptId(attemptData.id);
+      setAttemptStartedAt(attemptData.startedAt || null);
 
       // Step 5: Set timer
-      if (quizData.timeLimit) {
-        setTimeLeft(quizData.timeLimit * 60); // Convert minutes to seconds
-      } else {
-        setTimeLeft(0); // No time limit
-      }
+      if (quizData.timeLimit) setTimeLeft(quizData.timeLimit * 60); // Will be corrected by the drift-free timer effect
+      else setTimeLeft(0); // No time limit
 
     } catch (err: any) {
       console.error('[QuizTaking] Error loading quiz:', err);

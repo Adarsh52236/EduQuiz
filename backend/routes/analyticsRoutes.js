@@ -36,6 +36,35 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied: Only teachers can view general analytics' });
     }
 
+    // Normalize filters coming from the frontend.
+    // TeacherAnalytics uses values like 'all' for "no filter".
+    const normalizedTimeRange =
+      timeRange === '7d' || timeRange === '30d' || timeRange === '90d' || timeRange === 'all'
+        ? timeRange
+        : '30d';
+    // StudentAnalytics charts are fixed to ~30 days, so keep teacher charts aligned by default.
+    const timeDays = normalizedTimeRange === '7d' ? 7 : normalizedTimeRange === '90d' ? 90 : 30;
+
+    const effectiveClassId = classId && classId !== 'all' ? classId : null;
+    const effectiveQuizId = quizId && quizId !== 'all' ? quizId : null;
+    const effectiveStudentId = studentId && studentId !== 'all' ? studentId : null;
+
+    // Shared WHERE clause for quiz_attempts-backed queries.
+    const quizAttemptWhereClauses = ['q.teacherId = ?', 'qa.isCompleted = TRUE'];
+    const quizAttemptWhereParams = [userId];
+    if (effectiveClassId) {
+      quizAttemptWhereClauses.push('q.classId = ?');
+      quizAttemptWhereParams.push(effectiveClassId);
+    }
+    if (effectiveQuizId) {
+      quizAttemptWhereClauses.push('q.id = ?');
+      quizAttemptWhereParams.push(effectiveQuizId);
+    }
+    if (effectiveStudentId) {
+      quizAttemptWhereClauses.push('qa.studentId = ?');
+      quizAttemptWhereParams.push(effectiveStudentId);
+    }
+
     // Get total students across all classes
     const [totalStudentsRows] = await db.pool.query(
       `SELECT COUNT(DISTINCT ce.studentId) as totalStudents 
@@ -68,13 +97,18 @@ router.get('/', authenticateToken, async (req, res) => {
     );
     const activeQuizzes = activeQuizzesRows[0]?.activeQuizzes || 0;
 
-    // Get average score across all attempts
+    // Get average score across all attempts (as percentage)
     const [avgScoreRows] = await db.pool.query(
-      `SELECT AVG(qa.score) as averageScore 
+      `SELECT AVG(
+        CASE 
+          WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+          ELSE 0 
+        END
+      ) as averageScore 
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
-       WHERE q.teacherId = ? AND qa.isCompleted = TRUE`,
-      [userId]
+      WHERE ${quizAttemptWhereClauses.join(' AND ')}`,
+      quizAttemptWhereParams
     );
     const averageScore = avgScoreRows[0]?.averageScore || 0;
 
@@ -85,10 +119,10 @@ router.get('/', authenticateToken, async (req, res) => {
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
        JOIN users u ON qa.studentId = u.id
-       WHERE q.teacherId = ? AND qa.isCompleted = TRUE
+       WHERE ${quizAttemptWhereClauses.join(' AND ')}
        ORDER BY qa.submittedAt DESC
        LIMIT 10`,
-      [userId]
+      quizAttemptWhereParams
     );
 
     // Get new students this week
@@ -101,42 +135,57 @@ router.get('/', authenticateToken, async (req, res) => {
     );
     const newStudentsThisWeek = newStudentsRows[0]?.newStudents || 0;
 
-    // Get score improvement (compare last 30 days vs previous 30 days)
+    // Get score improvement (compare last 30 days vs previous 30 days) - as percentage
     const [currentPeriodRows] = await db.pool.query(
-      `SELECT AVG(qa.score) as currentAvg 
+      `SELECT AVG(
+        CASE 
+          WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+          ELSE 0 
+        END
+      ) as currentAvg 
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
-       WHERE q.teacherId = ? AND qa.isCompleted = TRUE 
-       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)`,
-      [userId]
+       WHERE ${quizAttemptWhereClauses.join(' AND ')} 
+       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL ${timeDays} DAY)`,
+      quizAttemptWhereParams
     );
     const [previousPeriodRows] = await db.pool.query(
-      `SELECT AVG(qa.score) as previousAvg 
+      `SELECT AVG(
+        CASE 
+          WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+          ELSE 0 
+        END
+      ) as previousAvg 
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
-       WHERE q.teacherId = ? AND qa.isCompleted = TRUE 
-       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL 60 DAY)
-       AND qa.submittedAt < DATE_SUB(NOW(), INTERVAL 30 DAY)`,
-      [userId]
+       WHERE ${quizAttemptWhereClauses.join(' AND ')} 
+       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL ${timeDays * 2} DAY)
+       AND qa.submittedAt < DATE_SUB(NOW(), INTERVAL ${timeDays} DAY)`,
+      quizAttemptWhereParams
     );
     
     const currentAvg = currentPeriodRows[0]?.currentAvg || 0;
     const previousAvg = previousPeriodRows[0]?.previousAvg || 0;
     const scoreImprovement = previousAvg > 0 ? Math.round(((currentAvg - previousAvg) / previousAvg) * 100) : 0;
 
-    // Get performance over time data (last 7 days)
+    // Get performance over time data (based on timeRange) - as percentage
     const [performanceOverTimeRows] = await db.pool.query(
       `SELECT 
          DATE(qa.submittedAt) as date,
-         AVG(qa.score) as avgScore,
+         AVG(
+          CASE 
+            WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+            ELSE 0 
+          END
+        ) as avgScore,
          COUNT(qa.id) as attempts
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
-       WHERE q.teacherId = ? AND qa.isCompleted = TRUE 
-       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       WHERE ${quizAttemptWhereClauses.join(' AND ')} 
+       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL ${timeDays} DAY)
        GROUP BY DATE(qa.submittedAt)
        ORDER BY date`,
-      [userId]
+      quizAttemptWhereParams
     );
 
     const performanceOverTime = {
@@ -145,19 +194,29 @@ router.get('/', authenticateToken, async (req, res) => {
       participation: performanceOverTimeRows.map(row => row.attempts)
     };
 
-    // Get quiz difficulty distribution
+    // Get quiz difficulty distribution (based on average percentage)
     const [quizDifficultyRows] = await db.pool.query(
       `SELECT 
          CASE 
-           WHEN AVG(qa.score) >= 80 THEN 'Easy'
-           WHEN AVG(qa.score) >= 60 THEN 'Medium'
+           WHEN AVG(
+            CASE 
+              WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+              ELSE 0 
+            END
+           ) >= 80 THEN 'Easy'
+           WHEN AVG(
+            CASE 
+              WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+              ELSE 0 
+            END
+           ) >= 60 THEN 'Medium'
            ELSE 'Hard'
          END as difficulty,
          COUNT(DISTINCT q.id) as count
        FROM quizzes q
        LEFT JOIN quiz_attempts qa ON q.id = qa.quizId AND qa.isCompleted = TRUE
        WHERE q.teacherId = ? AND q.isPublished = TRUE
-       GROUP BY difficulty`,
+       GROUP BY 1`,
       [userId]
     );
 
@@ -166,17 +225,23 @@ router.get('/', authenticateToken, async (req, res) => {
       counts: quizDifficultyRows.map(row => row.count)
     };
 
-    // Get top performing students
+    // Get top performing students (average percentage)
     const [topStudentsRows] = await db.pool.query(
-      `SELECT u.displayName, AVG(qa.score) as avgScore
+      `SELECT u.displayName, 
+        AVG(
+          CASE 
+            WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+            ELSE 0 
+          END
+        ) as avgScore
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
        JOIN users u ON qa.studentId = u.id
-       WHERE q.teacherId = ? AND qa.isCompleted = TRUE
+       WHERE ${quizAttemptWhereClauses.join(' AND ')}
        GROUP BY u.id, u.displayName
        ORDER BY avgScore DESC
        LIMIT 5`,
-      [userId]
+      quizAttemptWhereParams
     );
 
     const topStudents = {
@@ -199,7 +264,8 @@ router.get('/', authenticateToken, async (req, res) => {
         id: attempt.id,
         studentName: attempt.studentName,
         quizTitle: attempt.quizTitle,
-        score: attempt.score,
+        // Keep `score` in 0-100% scale since the UI treats it as a percentage
+        score: attempt.totalPoints > 0 ? Math.round((attempt.score / attempt.totalPoints) * 100) : 0,
         totalPoints: attempt.totalPoints,
         percentage: attempt.totalPoints > 0 ? Math.round((attempt.score / attempt.totalPoints) * 100) : 0,
         timeSpent: Math.round(attempt.timeTaken / 60), // Convert seconds to minutes
@@ -253,7 +319,13 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
          AVG(CASE WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 ELSE 0 END) as averageScore,
          MAX(CASE WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 ELSE 0 END) as highestScore,
          MIN(CASE WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 ELSE 0 END) as lowestScore,
-         AVG(qa.timeTaken) as averageTimeSpent
+         AVG(
+           CASE 
+             WHEN q.timeLimit IS NOT NULL AND q.timeLimit > 0 
+             THEN (qa.timeTaken / (q.timeLimit * 60)) * 100
+             ELSE 0
+           END
+         ) as averageTimeUsagePercent
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
        WHERE qa.studentId = ? AND qa.isCompleted = TRUE`,
@@ -266,7 +338,7 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
       averageScore: 0,
       highestScore: 0,
       lowestScore: 0,
-      averageTimeSpent: 0
+      averageTimeUsagePercent: 0
     };
 
     // Get performance over time (last 30 days)
@@ -322,7 +394,7 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
          qa.timeTaken,
          qa.submittedAt,
          (SELECT COUNT(*) FROM quiz_attempts qa2 
-          WHERE qa2.quizId = qa.quizId AND qa2.isCompleted = TRUE AND qa2.score > qa.score) + 1 as rank
+          WHERE qa2.quizId = qa.quizId AND qa2.isCompleted = TRUE AND qa2.score > qa.score) + 1 as rankPosition
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
        JOIN classes c ON q.classId = c.id
@@ -340,7 +412,7 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
       percentage: attempt.totalPoints > 0 ? Math.round((attempt.score / attempt.totalPoints) * 100) : 0,
       timeSpent: Math.round(attempt.timeTaken / 60),
       submittedAt: attempt.submittedAt,
-      rank: attempt.rank
+      rank: attempt.rankPosition ?? attempt.rank
     }));
 
     // Get improvement trends
@@ -368,7 +440,7 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
       studentId,
       overallPerformance: {
         ...overallPerformance,
-        averageTimeSpent: Math.round(overallPerformance.averageTimeSpent / 60) // Convert to minutes
+        averageTimeUsagePercent: Math.round(overallPerformance.averageTimeUsagePercent)
       },
       performanceOverTime,
       subjectPerformance,
@@ -378,7 +450,23 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
 
   } catch (error) {
     console.error('Student performance tracking error:', error);
-    res.status(500).json({ error: 'Failed to fetch student performance data' });
+    // For the analytics UI, it's better to return an "empty" dataset than fail the whole page
+    // (students with no attempts should still get a valid response).
+    res.status(200).json({
+      studentId: req.params.studentId,
+      overallPerformance: {
+        quizzesTaken: 0,
+        totalAttempts: 0,
+        averageScore: 0,
+        highestScore: 0,
+        lowestScore: 0,
+        averageTimeUsagePercent: 0
+      },
+      performanceOverTime: { labels: [], scores: [], attempts: [] },
+      subjectPerformance: [],
+      recentAttempts: [],
+      improvementTrend: []
+    });
   }
 });
 
@@ -447,13 +535,30 @@ router.get('/quiz-analytics/:quizId', authenticateToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied: You do not own this quiz' });
     }
 
-    // Average Score and Total Attempts
+    // Average Score and Total Attempts (average percentage)
     const [quizStatsRows] = await db.pool.query(
-      'SELECT AVG(score) as averageScore, COUNT(id) as totalAttempts FROM quiz_attempts WHERE quizId = ? AND isCompleted = TRUE',
+      `SELECT 
+        AVG(
+          CASE 
+            WHEN totalPoints > 0 THEN (score / totalPoints) * 100 
+            ELSE 0 
+          END
+        ) as averageScore,
+        COUNT(id) as totalAttempts 
+       FROM quiz_attempts 
+       WHERE quizId = ? AND isCompleted = TRUE`,
       [quizId]
     );
     const averageScore = quizStatsRows[0].averageScore || 0;
     const totalAttempts = quizStatsRows[0].totalAttempts;
+
+    // Average time taken (minutes) for UI
+    const [avgTimeRows] = await db.pool.query(
+      'SELECT AVG(timeTaken) as avgTimeTaken FROM quiz_attempts WHERE quizId = ? AND isCompleted = TRUE',
+      [quizId]
+    );
+    const averageTimeTaken = avgTimeRows[0]?.avgTimeTaken || 0;
+    const averageTimeTakenMinutes = Math.round(averageTimeTaken / 60);
 
     // Question Performance (accuracy per question)
     const [questionPerformanceRows] = await db.pool.query(
@@ -471,6 +576,15 @@ router.get('/quiz-analytics/:quizId', authenticateToken, async (req, res) => {
       questionId: q.questionId,
       questionText: q.questionText,
       accuracy: q.totalAnswers > 0 ? (q.correctAnswers / q.totalAnswers) * 100 : 0,
+    }));
+
+    // UI expects `questionAnalysis` with `correctPercentage` and `averageTimeSeconds`
+    const questionAnalysis = questionPerformance.map(q => ({
+      questionId: q.questionId,
+      questionText: q.questionText,
+      correctPercentage: Math.round(q.accuracy),
+      // Per-question time isn't stored; keep a safe fallback.
+      averageTimeSeconds: 0
     }));
 
     // Time Taken Distribution (example: bins of time taken)
@@ -551,6 +665,13 @@ router.get('/quiz-analytics/:quizId', authenticateToken, async (req, res) => {
       counts: scoreDistributionRows.map(row => row.count)
     };
 
+    // UI expects `topStudents` with `score` in 0-100% scale
+    const topStudents = highestPerformingStudents.map(s => ({
+      studentId: s.studentId,
+      studentName: s.studentName,
+      score: s.totalPoints > 0 ? Math.round((s.score / s.totalPoints) * 100) : 0
+    }));
+
     // Get completion rate
     const [totalStudentsRows] = await db.pool.query(
       `SELECT COUNT(DISTINCT ce.studentId) as totalStudents
@@ -571,9 +692,12 @@ router.get('/quiz-analytics/:quizId', authenticateToken, async (req, res) => {
       difficultyLevel,
       completionRate,
       questionPerformance,
+      questionAnalysis,
+      averageTimeTaken: averageTimeTakenMinutes,
       timeTakenDistribution,
       highestPerformingStudents,
       lowestPerformingStudents,
+      topStudents,
       topPerformers,
       scoreDistribution
     });

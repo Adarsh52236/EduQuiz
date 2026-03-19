@@ -130,8 +130,15 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     }
 
-    // Note: We allow attempts even after endTime for review purposes
-    // The frontend will handle showing appropriate messages for closed quizzes
+    // Enforce the endTime window:
+    // - Attempts are only allowed while the quiz is active (endTime inclusive).
+    // - Review is done via completed attempts, not by starting new attempts.
+    if (quiz.endTime) {
+      const endTime = new Date(quiz.endTime);
+      if (!isNaN(endTime.getTime()) && now > endTime) {
+        return res.status(403).json({ message: 'Quiz has ended' });
+      }
+    }
 
     // Check if student already has an active attempt for this quiz
     const [activeAttemptRows] = await db.pool.query(
@@ -210,7 +217,16 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
     // Calculate time taken
     const submittedAt = new Date();
     const startedAt = new Date(attempt.startedAt);
-    const timeTaken = Math.round((submittedAt.getTime() - startedAt.getTime()) / 1000);
+    // timeLimit is stored in minutes (teacher input). Backend stores timeTaken in seconds.
+    const rawTimeTakenSeconds = Math.round((submittedAt.getTime() - startedAt.getTime()) / 1000);
+    const timeLimitSeconds =
+      attempt.timeLimit !== null && attempt.timeLimit !== undefined
+        ? Math.round(Number(attempt.timeLimit) * 60)
+        : null;
+    // Clamp to the configured time limit so throttled/inactive tabs don't inflate analytics.
+    const timeTaken = timeLimitSeconds && timeLimitSeconds > 0
+      ? Math.min(rawTimeTakenSeconds, timeLimitSeconds)
+      : rawTimeTakenSeconds;
 
     console.log(`[AttemptRoutes] Getting quiz questions for quizId: ${quizId}`);
     // Get quiz questions

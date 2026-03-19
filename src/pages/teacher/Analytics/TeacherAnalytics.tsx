@@ -55,7 +55,7 @@ export default function TeacherAnalytics() {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('7d');
+  const [timeRange, setTimeRange] = useState('30d');
   const [classFilter, setClassFilter] = useState('all');
   const [quizFilter, setQuizFilter] = useState('all');
   const [studentFilter, setStudentFilter] = useState('all'); // New state for student filter

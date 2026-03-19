@@ -43,7 +43,7 @@ interface StudentPerformance {
     averageScore: number;
     highestScore: number;
     lowestScore: number;
-    averageTimeSpent: number;
+    averageTimeUsagePercent: number;
   };
   performanceOverTime: {
     labels: string[];
@@ -209,13 +209,13 @@ export function StudentAnalytics() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average Time Spent</CardTitle>
+            <CardTitle className="text-sm font-medium">Average Time Utilization</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{performanceData.overallPerformance.averageTimeSpent}m</div>
+            <div className="text-2xl font-bold">{performanceData.overallPerformance.averageTimeUsagePercent}%</div>
             <p className="text-xs text-muted-foreground">
-              Per quiz attempt
+              Average time used vs each quiz limit
             </p>
           </CardContent>
         </Card>

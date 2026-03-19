@@ -239,8 +239,9 @@ export default function CreateQuiz() {
           classId: selectedClassId,
           timeLimit: timeLimit,
           totalPoints: totalPoints,
-          startTime: startTime || new Date().toISOString(),
-          endTime: endTime || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+          // If teacher didn't set times, store NULL so status logic can treat it correctly.
+          startTime: startTime ? new Date(startTime).toISOString() : null,
+          endTime: endTime ? new Date(endTime).toISOString() : null,
           isPublished: true
         })
       });
