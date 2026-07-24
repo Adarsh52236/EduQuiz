@@ -1,4 +1,4 @@
-# Quiz Web Application
+# EduQuiz — Quiz Web Application
 
 A full-stack quiz application built with React, TypeScript, Node.js, and MySQL. Features include quiz creation, student enrollment, real-time notifications, leaderboards, and analytics.
 
@@ -18,6 +18,75 @@ A full-stack quiz application built with React, TypeScript, Node.js, and MySQL. 
 - 🔔 Real-time Notifications: Socket.io powered
 - 📱 Responsive Design: Works on all devices
 
+## Project Structure
+
+```
+EduQuiz/
+├── client/                        # React frontend (Vite)
+│   ├── public/                    # Static assets
+│   │   ├── favicon.svg
+│   │   └── _redirects
+│   ├── src/
+│   │   ├── assets/                # Images, fonts, etc.
+│   │   ├── components/
+│   │   │   ├── layout/            # TeacherLayout, StudentLayout
+│   │   │   ├── notifications/     # NotificationBell, Notifications
+│   │   │   ├── ui/                # Shadcn/ui components
+│   │   │   ├── NotificationBell.tsx
+│   │   │   └── ProtectedRoute.tsx
+│   │   ├── config/                # API config
+│   │   ├── contexts/              # AuthContext, NotificationContext, SocketContext
+│   │   ├── hooks/                 # Custom React hooks
+│   │   ├── lib/                   # Utilities, API helpers
+│   │   ├── pages/
+│   │   │   ├── auth/              # StudentAuth, TeacherAuth
+│   │   │   ├── student/           # Student dashboard, quizzes, grades, etc.
+│   │   │   ├── teacher/           # Teacher dashboard, quiz editor, classes, etc.
+│   │   │   └── LandingPage.tsx
+│   │   ├── types/                 # TypeScript type definitions
+│   │   ├── App.tsx                # Root component with routing
+│   │   ├── App.css
+│   │   ├── index.css              # Global styles & CSS variables
+│   │   └── main.tsx               # Entry point
+│   ├── index.html                 # HTML template
+│   ├── package.json               # Frontend dependencies
+│   ├── vite.config.ts             # Vite configuration
+│   ├── tailwind.config.cjs        # Tailwind CSS configuration
+│   ├── postcss.config.cjs         # PostCSS configuration
+│   ├── tsconfig.json              # TypeScript configuration
+│   ├── tsconfig.app.json
+│   ├── tsconfig.node.json
+│   └── components.json            # Shadcn/ui configuration
+│
+├── backend/                       # Express.js backend API
+│   ├── routes/                    # API route handlers
+│   │   ├── analyticsRoutes.js
+│   │   ├── answerRoutes.js
+│   │   ├── attemptRoutes.js
+│   │   ├── authRoutes.js
+│   │   ├── classRoutes.js
+│   │   ├── connectionRoutes.js
+│   │   ├── enrollmentRoutes.js
+│   │   ├── gradeCardRoutes.js
+│   │   ├── notificationRoutes.js
+│   │   ├── questionRoutes.js
+│   │   ├── quizRoutes.js
+│   │   └── userRoutes.js
+│   ├── db.js                      # Database configuration & table creation
+│   ├── data.js                    # Seed/sample data
+│   ├── index.js                   # Server entry point
+│   ├── package.json               # Backend dependencies
+│   ├── Procfile                   # Heroku/Render process file
+│   └── .env.example               # Backend env template
+│
+├── .env.example                   # Root env documentation
+├── .gitignore
+├── package.json                   # Root scripts (dev:client, dev:server, etc.)
+├── render.yaml                    # Render deployment config (backend)
+├── vercel.json                    # Vercel deployment config (frontend)
+└── README.md
+```
+
 ## Quick Start
 
 ### Prerequisites
@@ -29,94 +98,68 @@ A full-stack quiz application built with React, TypeScript, Node.js, and MySQL. 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/Adarsh52236/Quiz_web.git
-   cd Quiz_web
+   git clone https://github.com/Adarsh52236/EduQuiz.git
+   cd EduQuiz
    ```
 
-2. **Set up Backend**
+2. **Install all dependencies**
    ```bash
-   cd backend
-   npm install
+   npm run install:all
    ```
+   Or install individually:
+   ```bash
+   npm run install:client
+   npm run install:server
+   ```
+
+3. **Configure environment variables**
    
-   Copy `backend/.env.example` to `backend/.env` and fill in your database and JWT values:
+   **Backend** — Copy `backend/.env.example` to `backend/.env`:
    ```bash
-   cp .env.example .env
+   cp backend/.env.example backend/.env
    ```
-   Required variables: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `JWT_SECRET`, `FRONTEND_URL`, `NODE_ENV`.
+   Required: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `JWT_SECRET`, `FRONTEND_URL`
 
-3. **Start Backend Server**
-   ```bash
-   cd backend
-   npm start
-   ```
-   Backend will run on `http://localhost:3001`
-
-4. **Set up Frontend**
-   ```bash
-   # From project root
-   npm install
-   ```
-   
-   Create a `.env` file in the root folder:
+   **Frontend** — Create `client/.env`:
    ```env
    VITE_API_URL=http://localhost:3001
    ```
 
+4. **Start Backend Server**
+   ```bash
+   npm run dev:server
+   ```
+   Backend runs on `http://localhost:3001`
+
 5. **Start Frontend Development Server**
    ```bash
-   npm run dev
+   npm run dev:client
    ```
-   Frontend will run on `http://localhost:5173`
-
-## Project Structure
-
-```
-Quiz_web/
-├── backend/           # Express.js backend server
-│   ├── routes/        # API routes
-│   ├── db.js          # Database configuration
-│   └── index.js       # Server entry point
-├── src/               # React frontend
-│   ├── components/    # React components
-│   ├── pages/         # Page components
-│   ├── contexts/      # React contexts
-│   └── config/        # Configuration files
-├── dist/              # Production build output
-└── public/            # Static assets
-```
-
-## Deployment
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
-
-### Quick Deployment Summary
-
-1. **Deploy Backend** to Render
-   - Set root directory to `backend`
-   - Build command: `npm install`
-   - Start command: `npm start`
-   - Add environment variables (see DEPLOYMENT.md)
-
-2. **Deploy Frontend** to Vercel
-   - Framework: Vite
-   - Build command: `npm run build`
-   - Output directory: `dist`
-   - Add `VITE_API_URL` environment variable pointing to your Render backend URL
-
-3. **Update CORS**: Set `FRONTEND_URL` in Render backend to your Vercel frontend URL
+   Frontend runs on `http://localhost:5173`
 
 ## Available Scripts
 
-### Frontend
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
+### From Project Root
+| Command | Description |
+|---------|-------------|
+| `npm run dev:client` | Start frontend dev server |
+| `npm run dev:server` | Start backend server |
+| `npm run build:client` | Build frontend for production |
+| `npm run install:all` | Install all dependencies |
+| `npm run lint` | Run ESLint on frontend |
 
-### Backend
-- `npm start` - Start production server
-- `npm run dev` - Start development server (if configured)
+### From `client/`
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
+
+### From `backend/`
+| Command | Description |
+|---------|-------------|
+| `npm start` | Start production server |
 
 ## Database Configuration
 
@@ -125,29 +168,32 @@ The application uses Aiven MySQL with SSL. The database configuration is in `bac
 - Handles SSL connections
 - Manages connection pooling
 
-## Environment Variables
+## Deployment
 
-### Backend (.env)
-- `DB_HOST` - MySQL host
-- `DB_PORT` - MySQL port
-- `DB_USER` - MySQL username
-- `DB_PASSWORD` - MySQL password
-- `DB_NAME` - Database name
-- `PORT` - Backend server port
-- `JWT_SECRET` - Secret for JWT tokens
-- `FRONTEND_URL` - Frontend URL for CORS
+### Backend → Render
+- Set root directory to `backend`
+- Build command: `npm install`
+- Start command: `npm start`
+- Add environment variables (DB credentials, JWT secret, FRONTEND_URL)
 
-### Frontend (.env)
-- `VITE_API_URL` - Backend API URL
+### Frontend → Vercel
+- Framework: Vite
+- Root directory: `client`
+- Build command: `npm run build`
+- Output directory: `dist`
+- Add `VITE_API_URL` environment variable pointing to your Render backend URL
+
+### Update CORS
+Set `FRONTEND_URL` in the Render backend to your Vercel frontend URL.
 
 ## API Endpoints
 
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - User registration
-- `GET /api/quizzes` - Get quizzes
-- `POST /api/quizzes` - Create quiz
-- `GET /api/classes` - Get classes
-- `POST /api/classes` - Create class
+- `POST /api/auth/login` — User login
+- `POST /api/auth/register` — User registration
+- `GET /api/quizzes` — Get quizzes
+- `POST /api/quizzes` — Create quiz
+- `GET /api/classes` — Get classes
+- `POST /api/classes` — Create class
 - ... and more (see route files in `backend/routes/`)
 
 ## Contributing
@@ -160,7 +206,3 @@ The application uses Aiven MySQL with SSL. The database configuration is in `bac
 ## License
 
 ISC
-
-## Support
-
-For deployment help, see [DEPLOYMENT.md](./DEPLOYMENT.md)

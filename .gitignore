@@ -6,6 +6,7 @@ node_modules/
 .env.local
 .env.*.local
 backend/.env
+client/.env
 
 # Certificates / keys (often contain secrets)
 *.pem
@@ -14,6 +15,7 @@ backend/.env
 # Build output
 dist/
 build/
+client/dist/
 
 # Logs and debug
 *.log

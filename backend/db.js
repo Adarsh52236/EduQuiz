@@ -1,64 +1,141 @@
-const mysql = require('mysql2/promise');
-const bcrypt = require('bcryptjs');
-const { quizQuestions } = require('./data');
+const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
-// Aiven MySQL Database Configuration — use .env only (no hardcoded secrets)
+// PostgreSQL Database Configuration
 const dbConfig = {
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '3306', 10),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false, // Aiven uses self-signed certificates
-    // If you have the CA certificate file, uncomment below and comment rejectUnauthorized
-    // ca: fs.existsSync(path.join(__dirname, 'aiven-ca.pem')) 
-    //   ? fs.readFileSync(path.join(__dirname, 'aiven-ca.pem'))
-    //   : undefined
+    rejectUnauthorized: false
   },
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 };
 
-let pool;
+const pgPool = new Pool(dbConfig);
+
+// Map PostgreSQL lowercase column names back to expected camelCase
+const camelCaseMap = {
+  displayname: 'displayName',
+  dateofbirth: 'dateOfBirth',
+  classcode: 'classCode',
+  teacherid: 'teacherId',
+  createdat: 'createdAt',
+  updatedat: 'updatedAt',
+  classid: 'classId',
+  studentid: 'studentId',
+  enrolledat: 'enrolledAt',
+  timelimit: 'timeLimit',
+  totalpoints: 'totalPoints',
+  starttime: 'startTime',
+  endtime: 'endTime',
+  ispublished: 'isPublished',
+  quizid: 'quizId',
+  questiontext: 'questionText',
+  questiontype: 'questionType',
+  orderindex: 'orderIndex',
+  correctanswer: 'correctAnswer',
+  startedat: 'startedAt',
+  submittedat: 'submittedAt',
+  timetaken: 'timeTaken',
+  iscompleted: 'isCompleted',
+  attemptid: 'attemptId',
+  questionid: 'questionId',
+  iscorrect: 'isCorrect',
+  pointsearned: 'pointsEarned',
+  totalscore: 'totalScore',
+  challengerid: 'challengerId',
+  opponentid: 'opponentId',
+  winnerid: 'winnerId',
+  connectedstudentid: 'connectedStudentId',
+  userid: 'userId',
+  isread: 'isRead',
+  globalxp: 'globalXp',
+  elorating: 'eloRating',
+  aifeedback: 'aiFeedback',
+  matchtype: 'matchType',
+  roomid: 'roomId'
+};
+
+function formatRows(rows) {
+  if (!rows || !Array.isArray(rows)) return rows;
+  return rows.map(row => {
+    const formatted = {};
+    for (const key in row) {
+      if (camelCaseMap[key]) {
+        formatted[camelCaseMap[key]] = row[key];
+      } else {
+        formatted[key] = row[key];
+      }
+    }
+    return formatted;
+  });
+}
+
+// Wrapper to make pg look like mysql2 for the route files
+const poolWrapper = {
+  query: async (text, params) => {
+    let index = 1;
+    // Replace MySQL ? with PostgreSQL $1, $2, etc.
+    const pgText = text.replace(/\?/g, () => `$${index++}`);
+    
+    // Fix MySQL specific queries
+    let finalQuery = pgText;
+    
+    const result = await pgPool.query(finalQuery, params);
+    
+    // Return in mysql2 format: [rows, fields]
+    return [formatRows(result.rows), result.fields];
+  },
+  getConnection: async () => {
+    const client = await pgPool.connect();
+    return {
+      query: async (text, params) => {
+        let index = 1;
+        const pgText = text.replace(/\?/g, () => `$${index++}`);
+        const result = await client.query(pgText, params);
+        return [formatRows(result.rows), result.fields];
+      },
+      release: () => client.release()
+    };
+  }
+};
 
 async function initializeDatabase() {
-  console.log('Attempting to initialize database connection...');
-  console.log(`Connecting to: ${dbConfig.host}:${dbConfig.port}`);
-  console.log(`Database: ${dbConfig.database}`);
-  console.log(`User: ${dbConfig.user}`);
+  console.log('Attempting to initialize PostgreSQL database connection...');
   
   try {
-    // Create the main pool with the database specified
-    pool = mysql.createPool(dbConfig);
-    
-    // Test the connection with timeout
-    const testConnection = await Promise.race([
-      pool.getConnection(),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000)
-      )
-    ]);
-    
+    const client = await pgPool.connect();
     console.log('✅ Database connection successful!');
-    await testConnection.ping();
-    testConnection.release();
 
-    // Get a connection to create tables
-    const connection = await pool.getConnection();
     console.log('Creating/verifying database tables...');
-    await connection.query(`
+
+    // Drop tables to recreate with new schema (since we are pivoting on a fresh DB)
+    await client.query(`
+      DROP TABLE IF EXISTS notifications, student_connections, challenges, leaderboards, quiz_answers, quiz_attempts, quiz_questions, quizzes, class_enrollments, classes, users CASCADE;
+    `);
+    
+    // Trigger function for updatedAt
+    await client.query(`
+      CREATE OR REPLACE FUNCTION update_updated_at_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          NEW.updatedAt = CURRENT_TIMESTAMP;
+          RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+    `);
+
+    // We do NOT quote table columns so they are case-insensitive in queries,
+    // and rely on formatRows to restore the camelCase in JS.
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(255) PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         displayName VARCHAR(255),
-        role ENUM('student', 'teacher') NOT NULL,
+        role VARCHAR(50) CHECK(role IN ('student', 'teacher')) NOT NULL,
         avatar VARCHAR(255),
         bio TEXT,
         department VARCHAR(255),
@@ -66,213 +143,182 @@ async function initializeDatabase() {
         phone VARCHAR(50),
         address TEXT,
         dateOfBirth DATE,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        resetToken VARCHAR(255),
+        resetTokenExpiry TIMESTAMP,
+        globalXp INT DEFAULT 0,
+        eloRating INT DEFAULT 1200,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     
-    // Add new columns if they don't exist (for existing databases)
-    // MySQL doesn't support IF NOT EXISTS for ALTER TABLE, so we check first
-    try {
-      const [columns] = await connection.query(`
-        SELECT COLUMN_NAME 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_SCHEMA = DATABASE() 
-        AND TABLE_NAME = 'users' 
-        AND COLUMN_NAME IN ('department', 'grade', 'phone', 'address', 'dateOfBirth')
-      `);
-      const existingColumns = columns.map(col => col.COLUMN_NAME);
-      
-      if (!existingColumns.includes('department')) {
-        await connection.query(`ALTER TABLE users ADD COLUMN department VARCHAR(255)`);
-      }
-      if (!existingColumns.includes('grade')) {
-        await connection.query(`ALTER TABLE users ADD COLUMN grade VARCHAR(50)`);
-      }
-      if (!existingColumns.includes('phone')) {
-        await connection.query(`ALTER TABLE users ADD COLUMN phone VARCHAR(50)`);
-      }
-      if (!existingColumns.includes('address')) {
-        await connection.query(`ALTER TABLE users ADD COLUMN address TEXT`);
-      }
-      if (!existingColumns.includes('dateOfBirth')) {
-        await connection.query(`ALTER TABLE users ADD COLUMN dateOfBirth DATE`);
-      }
-    } catch (alterError) {
-      // Columns might already exist or other error, log but continue
-      console.log('Note: Error adding columns (they may already exist):', alterError.message);
-    }
-    await connection.query(`
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+      CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS classes (
         id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         description TEXT,
         classCode VARCHAR(255) UNIQUE NOT NULL,
-        teacherId VARCHAR(255) NOT NULL,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (teacherId) REFERENCES users(id) ON DELETE CASCADE
+        teacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await connection.query(`
+    
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_classes_updated_at ON classes;
+      CREATE TRIGGER update_classes_updated_at BEFORE UPDATE ON classes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS class_enrollments (
         id VARCHAR(255) PRIMARY KEY,
-        classId VARCHAR(255) NOT NULL,
-        studentId VARCHAR(255) NOT NULL,
-        enrolledAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (classId) REFERENCES classes(id) ON DELETE CASCADE,
-        FOREIGN KEY (studentId) REFERENCES users(id) ON DELETE CASCADE,
+        classId VARCHAR(255) NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        enrolledAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (classId, studentId)
       );
     `);
-    await connection.query(`
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id VARCHAR(255) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         description TEXT,
-        type ENUM('multiple-choice', 'true-false', 'short-answer') NOT NULL DEFAULT 'multiple-choice',
-        classId VARCHAR(255),
-        teacherId VARCHAR(255) NOT NULL,
+        type VARCHAR(50) CHECK(type IN ('multiple-choice', 'true-false', 'short-answer')) NOT NULL DEFAULT 'multiple-choice',
+        classId VARCHAR(255) REFERENCES classes(id) ON DELETE SET NULL,
+        teacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         timeLimit INT,
         totalPoints INT DEFAULT 0,
-        startTime DATETIME,
-        endTime DATETIME,
+        startTime TIMESTAMP,
+        endTime TIMESTAMP,
         isPublished BOOLEAN DEFAULT FALSE,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (classId) REFERENCES classes(id) ON DELETE SET NULL,
-        FOREIGN KEY (teacherId) REFERENCES users(id) ON DELETE CASCADE
+        visibility VARCHAR(50) DEFAULT 'private',
+        tags JSONB,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await connection.query(`
+    
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_quizzes_updated_at ON quizzes;
+      CREATE TRIGGER update_quizzes_updated_at BEFORE UPDATE ON quizzes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS quiz_questions (
         id VARCHAR(255) PRIMARY KEY,
-        quizId VARCHAR(255) NOT NULL,
+        quizId VARCHAR(255) NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
         questionText TEXT NOT NULL,
-        questionType ENUM('multiple-choice', 'true-false', 'short-answer') NOT NULL,
+        questionType VARCHAR(50) CHECK(questionType IN ('multiple-choice', 'true-false', 'short-answer')) NOT NULL,
         points INT NOT NULL,
         orderIndex INT NOT NULL,
-        options JSON,
+        options JSONB,
         correctAnswer TEXT NOT NULL,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE
+        difficulty VARCHAR(50) DEFAULT 'medium',
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await connection.query(`
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS quiz_attempts (
         id VARCHAR(255) PRIMARY KEY,
-        quizId VARCHAR(255) NOT NULL,
-        studentId VARCHAR(255) NOT NULL,
-        startedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        submittedAt DATETIME,
+        quizId VARCHAR(255) NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        startedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        submittedAt TIMESTAMP,
         score INT,
         totalPoints INT,
         timeTaken INT,
-        isCompleted BOOLEAN DEFAULT FALSE,
-        FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE,
-        FOREIGN KEY (studentId) REFERENCES users(id) ON DELETE CASCADE
+        isCompleted BOOLEAN DEFAULT FALSE
       );
     `);
-    await connection.query(`
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS quiz_answers (
         id VARCHAR(255) PRIMARY KEY,
-        attemptId VARCHAR(255) NOT NULL,
-        questionId VARCHAR(255) NOT NULL,
+        attemptId VARCHAR(255) NOT NULL REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+        questionId VARCHAR(255) NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
         answer TEXT NOT NULL,
         isCorrect BOOLEAN,
         pointsEarned INT,
-        FOREIGN KEY (attemptId) REFERENCES quiz_attempts(id) ON DELETE CASCADE,
-        FOREIGN KEY (questionId) REFERENCES quiz_questions(id) ON DELETE CASCADE
+        aiFeedback TEXT
       );
     `);
-    await connection.query(`
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS leaderboards (
         id VARCHAR(255) PRIMARY KEY,
-        classId VARCHAR(255) NOT NULL,
-        studentId VARCHAR(255) NOT NULL,
+        classId VARCHAR(255) NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         totalScore INT DEFAULT 0,
         student_rank INT,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (classId) REFERENCES classes(id) ON DELETE CASCADE,
-        FOREIGN KEY (studentId) REFERENCES users(id) ON DELETE CASCADE,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (classId, studentId)
       );
     `);
-    await connection.query(`
+    
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_leaderboards_updated_at ON leaderboards;
+      CREATE TRIGGER update_leaderboards_updated_at BEFORE UPDATE ON leaderboards FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS challenges (
         id VARCHAR(255) PRIMARY KEY,
-        challengerId VARCHAR(255) NOT NULL,
-        opponentId VARCHAR(255) NOT NULL,
-        quizId VARCHAR(255) NOT NULL,
-        status ENUM('pending', 'accepted', 'rejected', 'completed') DEFAULT 'pending',
-        winnerId VARCHAR(255),
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (challengerId) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (opponentId) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE,
-        FOREIGN KEY (winnerId) REFERENCES users(id) ON DELETE SET NULL
+        roomId VARCHAR(255),
+        matchType VARCHAR(50) DEFAULT '1v1',
+        challengerId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        opponentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        quizId VARCHAR(255) NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        status VARCHAR(50) CHECK(status IN ('pending', 'accepted', 'rejected', 'in_progress', 'completed')) DEFAULT 'pending',
+        winnerId VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await connection.query(`
+    
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_challenges_updated_at ON challenges;
+      CREATE TRIGGER update_challenges_updated_at BEFORE UPDATE ON challenges FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS student_connections (
         id VARCHAR(255) PRIMARY KEY,
-        studentId VARCHAR(255) NOT NULL,
-        connectedStudentId VARCHAR(255) NOT NULL,
-        status ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (studentId) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (connectedStudentId) REFERENCES users(id) ON DELETE CASCADE,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        connectedStudentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(50) CHECK(status IN ('pending', 'accepted', 'rejected')) DEFAULT 'pending',
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (studentId, connectedStudentId)
       );
     `);
-    await connection.query(`
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id VARCHAR(255) PRIMARY KEY,
-        userId VARCHAR(255) NOT NULL,
+        userId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         type VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
         link VARCHAR(500),
         isRead BOOLEAN DEFAULT FALSE,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    connection.release();
 
-    console.log('✅ Database and tables initialized or already exist.');
-    console.log('✅ All tables are ready to use.');
+    client.release();
+    console.log('✅ PostgreSQL Database and tables initialized.');
   } catch (error) {
     console.error('❌ Error initializing database:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      errno: error.errno,
-      sqlState: error.sqlState
-    });
-    
-    // Provide helpful error messages
-    if (error.code === 'ECONNREFUSED') {
-      console.error('❌ Connection refused. Please check:');
-      console.error('   - Database host and port are correct');
-      console.error('   - Database server is running');
-      console.error('   - Firewall allows connections');
-    } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
-      console.error('❌ Access denied. Please check:');
-      console.error('   - Username and password are correct');
-      console.error('   - User has proper permissions');
-    } else if (error.code === 'ENOTFOUND') {
-      console.error('❌ Host not found. Please check:');
-      console.error('   - Database hostname is correct');
-      console.error('   - Internet connection is available');
-    }
-    
-    process.exit(1); // Exit if database connection fails
+    process.exit(1);
   }
 }
 
-// Export the pool as a getter to ensure it's available after initialization
 module.exports = {
-  get pool() { return pool; },
+  get pool() { return poolWrapper; },
   initializeDatabase
 };

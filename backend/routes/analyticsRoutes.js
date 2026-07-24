@@ -43,7 +43,13 @@ router.get('/', authenticateToken, async (req, res) => {
         ? timeRange
         : '30d';
     // StudentAnalytics charts are fixed to ~30 days, so keep teacher charts aligned by default.
-    const timeDays = normalizedTimeRange === '7d' ? 7 : normalizedTimeRange === '90d' ? 90 : 30;
+    const timeDays = normalizedTimeRange === 'all'
+      ? 3650 // ~10 years; approximates "all time" while keeping SQL simple.
+      : normalizedTimeRange === '7d'
+        ? 7
+        : normalizedTimeRange === '90d'
+          ? 90
+          : 30;
 
     const effectiveClassId = classId && classId !== 'all' ? classId : null;
     const effectiveQuizId = quizId && quizId !== 'all' ? quizId : null;
@@ -120,6 +126,7 @@ router.get('/', authenticateToken, async (req, res) => {
        JOIN quizzes q ON qa.quizId = q.id
        JOIN users u ON qa.studentId = u.id
        WHERE ${quizAttemptWhereClauses.join(' AND ')}
+       AND qa.submittedAt >= DATE_SUB(NOW(), INTERVAL ${timeDays} DAY)
        ORDER BY qa.submittedAt DESC
        LIMIT 10`,
       quizAttemptWhereParams
@@ -197,26 +204,35 @@ router.get('/', authenticateToken, async (req, res) => {
     // Get quiz difficulty distribution (based on average percentage)
     const [quizDifficultyRows] = await db.pool.query(
       `SELECT 
-         CASE 
-           WHEN AVG(
-            CASE 
-              WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
-              ELSE 0 
-            END
-           ) >= 80 THEN 'Easy'
-           WHEN AVG(
-            CASE 
-              WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
-              ELSE 0 
-            END
-           ) >= 60 THEN 'Medium'
-           ELSE 'Hard'
-         END as difficulty,
-         COUNT(DISTINCT q.id) as count
-       FROM quizzes q
-       LEFT JOIN quiz_attempts qa ON q.id = qa.quizId AND qa.isCompleted = TRUE
-       WHERE q.teacherId = ? AND q.isPublished = TRUE
-       GROUP BY 1`,
+         t.difficulty as difficulty,
+         COUNT(*) as count
+       FROM (
+         SELECT 
+           q.id,
+           CASE 
+             WHEN AVG(
+               CASE 
+                 WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+                 ELSE 0 
+               END
+             ) >= 80 THEN 'Easy'
+             WHEN AVG(
+               CASE 
+                 WHEN qa.totalPoints > 0 THEN (qa.score / qa.totalPoints) * 100 
+                 ELSE 0 
+               END
+             ) >= 60 THEN 'Medium'
+             ELSE 'Hard'
+           END as difficulty
+         FROM quizzes q
+         LEFT JOIN quiz_attempts qa 
+           ON q.id = qa.quizId 
+           AND qa.isCompleted = TRUE
+         WHERE q.teacherId = ? 
+           AND q.isPublished = TRUE
+         GROUP BY q.id
+       ) t
+       GROUP BY t.difficulty`,
       [userId]
     );
 
@@ -280,7 +296,20 @@ router.get('/', authenticateToken, async (req, res) => {
     res.status(200).json(responseData);
   } catch (error) {
     console.error('[AnalyticsRoutes] Error fetching general analytics:', error);
-    res.status(500).json({ message: 'Server error fetching general analytics', error: error.message });
+    // Avoid breaking the whole Teacher Analytics page.
+    res.status(200).json({
+      totalStudents: 0,
+      totalQuizzes: 0,
+      publishedQuizzes: 0,
+      activeQuizzes: 0,
+      averageScore: 0,
+      newStudentsThisWeek: 0,
+      scoreImprovement: 0,
+      performanceOverTime: { labels: [], scores: [], participation: [] },
+      quizDifficulty: { labels: [], counts: [] },
+      topStudents: { labels: [], scores: [] },
+      recentAttempts: []
+    });
   }
 });
 
@@ -310,6 +339,13 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
         return res.status(403).json({ error: 'Access denied - student not in your classes' });
       }
     }
+
+    // Get Student Global Stats (XP and Elo)
+    const [userRows] = await db.pool.query(
+      'SELECT globalXp, eloRating FROM users WHERE id = ?', 
+      [studentId]
+    );
+    const globalStats = userRows[0] || { globalXp: 0, eloRating: 1200 };
 
     // Get overall student performance
     const [overallPerformanceRows] = await db.pool.query(
@@ -438,6 +474,7 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
 
     res.status(200).json({
       studentId,
+      globalStats, // Injected for OmniPrep merged view
       overallPerformance: {
         ...overallPerformance,
         averageTimeUsagePercent: Math.round(overallPerformance.averageTimeUsagePercent)
@@ -454,6 +491,7 @@ router.get('/student-performance/:studentId', authenticateToken, async (req, res
     // (students with no attempts should still get a valid response).
     res.status(200).json({
       studentId: req.params.studentId,
+      globalStats: { globalXp: 0, eloRating: 1200 },
       overallPerformance: {
         quizzesTaken: 0,
         totalAttempts: 0,
@@ -651,17 +689,17 @@ router.get('/quiz-analytics/:quizId', authenticateToken, async (req, res) => {
            WHEN score >= 70 THEN '70-79%'
            WHEN score >= 60 THEN '60-69%'
            ELSE 'Below 60%'
-         END as range,
+         END as scoreRange,
          COUNT(*) as count
        FROM quiz_attempts
        WHERE quizId = ? AND isCompleted = TRUE
-       GROUP BY range
-       ORDER BY range`,
+       GROUP BY scoreRange
+       ORDER BY scoreRange`,
       [quizId]
     );
 
     const scoreDistribution = {
-      labels: scoreDistributionRows.map(row => row.range),
+      labels: scoreDistributionRows.map(row => row.scoreRange),
       counts: scoreDistributionRows.map(row => row.count)
     };
 
@@ -771,17 +809,82 @@ router.get('/student-analytics/:classId/:studentId', authenticateToken, async (r
     res.status(200).json({
       studentId,
       studentName,
-      classId,
-      quizScores,
       averageAccuracy: parseFloat(averageAccuracy.toFixed(2)),
       attendanceRate: parseFloat(attendanceRate.toFixed(2)),
+      quizScores,
     });
   } catch (error) {
-    console.error('Error fetching per-student analytics:', error);
-    res.status(500).json({ message: 'Server error fetching per-student analytics' });
+    console.error('Error fetching student analytics:', error);
+    res.status(500).json({ message: 'Server error fetching student analytics' });
   }
 });
 
+// GET Heatmap Analytics (Rows = Students, Cols = Quizzes)
+router.get('/heatmap/:classId', authenticateToken, async (req, res) => {
+  const { classId } = req.params;
+  const teacherId = req.user.id;
+
+  try {
+    if (req.user.role !== 'teacher') {
+      return res.status(403).json({ message: 'Access denied: Only teachers can view heatmaps' });
+    }
+    if (!(await checkTeacherOwnership(teacherId, classId))) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Get all published quizzes for this class (Columns)
+    const [quizzes] = await db.pool.query(
+      'SELECT id, title FROM quizzes WHERE classId = ? AND isPublished = TRUE ORDER BY createdAt ASC',
+      [classId]
+    );
+
+    // Get all enrolled students (Rows)
+    const [students] = await db.pool.query(
+      `SELECT u.id, u.displayName, u.globalXp 
+       FROM class_enrollments ce 
+       JOIN users u ON ce.studentId = u.id 
+       WHERE ce.classId = ?`,
+      [classId]
+    );
+
+    // Get all scores for these students and quizzes (Cells)
+    const [attempts] = await db.pool.query(
+      `SELECT studentId, quizId, score, totalPoints 
+       FROM quiz_attempts 
+       WHERE isCompleted = TRUE`
+    );
+
+    // Build the grid
+    const heatmap = students.map(student => {
+      const studentGrades = {};
+      quizzes.forEach(quiz => {
+        // Find best attempt for this student/quiz combination
+        const studentAttempts = attempts.filter(a => a.studentId === student.id && a.quizId === quiz.id);
+        if (studentAttempts.length > 0) {
+          // Calculate max percentage
+          const maxPerc = Math.max(...studentAttempts.map(a => 
+            a.totalPoints > 0 ? (a.score / a.totalPoints) * 100 : 0
+          ));
+          studentGrades[quiz.id] = Math.round(maxPerc);
+        } else {
+          studentGrades[quiz.id] = null; // Unattempted
+        }
+      });
+      return {
+        studentId: student.id,
+        studentName: student.displayName,
+        globalXp: student.globalXp,
+        grades: studentGrades
+      };
+    });
+
+    res.status(200).json({ quizzes, heatmap });
+
+  } catch (error) {
+    console.error('Error fetching heatmap:', error);
+    res.status(500).json({ message: 'Server error fetching heatmap' });
+  }
+});
 // GET Leaderboard for a class (accessible by both teachers and students)
 router.get('/leaderboard/:classId', authenticateToken, async (req, res) => {
   const { classId } = req.params;

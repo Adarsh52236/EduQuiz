@@ -42,9 +42,10 @@ router.post('/signup', async (req, res) => {
     return res.status(400).json({ message: 'Email is too long' });
   }
   
-  // Password validation
-  if (password.length < 6) {
-    return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+  // Password validation (Enterprise grade: min 8 chars, 1 uppercase, 1 lowercase, 1 number)
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.' });
   }
   if (password.length > 128) {
     return res.status(400).json({ message: 'Password is too long' });
@@ -192,6 +193,93 @@ router.post('/signout', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error during signout:', error);
     res.status(500).json({ message: 'Server error during signout' });
+  }
+});
+
+// Forgot Password Request (Generates Token)
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email is required' });
+
+  try {
+    const [users] = await db.pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [email.trim()]);
+    const user = users[0];
+
+    if (!user) {
+      // Return 200 to prevent email enumeration attacks
+      return res.status(200).json({ message: 'If an account exists, a password reset link has been sent.' });
+    }
+
+    // Generate a secure reset token
+    const resetToken = uuidv4();
+    // Expiration time: 1 hour from now
+    const tokenExpiry = new Date(Date.now() + 3600000).toISOString(); 
+
+    // Update user record with token and expiry
+    await db.pool.query(
+      'UPDATE users SET resetToken = ?, resetTokenExpiry = ? WHERE id = ?',
+      [resetToken, tokenExpiry, user.id]
+    );
+
+    // MOCK EMAIL SENDING
+    console.log('\n=======================================');
+    console.log(`📧 MOCK EMAIL SENT TO: ${user.email}`);
+    console.log(`🔗 Reset Link: http://localhost:5173/reset-password?token=${resetToken}`);
+    console.log('=======================================\n');
+
+    res.status(200).json({ message: 'If an account exists, a password reset link has been sent.' });
+  } catch (error) {
+    console.error('Error in forgot-password:', error);
+    res.status(500).json({ message: 'Server error during password reset request' });
+  }
+});
+
+// Reset Password (Verifies Token and Updates Password)
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ message: 'Token and new password are required' });
+  }
+
+  // Strict Password Validation
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+  if (!passwordRegex.test(newPassword)) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.' });
+  }
+
+  try {
+    const [users] = await db.pool.query(
+      'SELECT id, resetTokenExpiry FROM users WHERE resetToken = ?',
+      [token]
+    );
+    const user = users[0];
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    // Check if token has expired
+    const now = new Date();
+    const expiry = new Date(user.resetTokenExpiry);
+    
+    if (now > expiry) {
+      return res.status(400).json({ message: 'Reset token has expired. Please request a new one.' });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update password and clear reset token
+    await db.pool.query(
+      'UPDATE users SET password = ?, resetToken = NULL, resetTokenExpiry = NULL WHERE id = ?',
+      [hashedPassword, user.id]
+    );
+
+    res.status(200).json({ message: 'Password has been reset successfully. You can now login.' });
+  } catch (error) {
+    console.error('Error in reset-password:', error);
+    res.status(500).json({ message: 'Server error during password reset' });
   }
 });
 

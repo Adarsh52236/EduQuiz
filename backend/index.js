@@ -27,6 +27,8 @@ const attemptRoutes = require('./routes/attemptRoutes');
 const answerRoutes = require('./routes/answerRoutes');
 const enrollmentRoutes = require('./routes/enrollmentRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
+const practiceRoutes = require('./routes/practiceRoutes'); // New Practice Hub routes
+const aiRoutes = require('./routes/aiRoutes'); // New AI Grading routes
 const userRoutes = require('./routes/userRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const gradeCardRoutes = require('./routes/gradeCardRoutes');
@@ -70,6 +72,9 @@ io.on('connection', (socket) => {
   });
 });
 
+// Initialize specialized socket handlers
+require('./sockets/arenaHandler')(io);
+
 // Initialize database and start server
 initializeDatabase().then(() => {
   app.use(express.json());
@@ -91,10 +96,22 @@ initializeDatabase().then(() => {
   app.use('/api/quizzes', quizRoutes);
   app.use('/api/questions', questionRoutes);
   app.use('/api/classes', classRoutes);
+  console.log('Class routes registered.');
+  
+  app.use('/api/enrollments', enrollmentRoutes);
+  console.log('Enrollment routes registered.');
+  
+  app.use('/api/connections', connectionRoutes);
+  console.log('Connection routes registered.');
+
+  app.use('/api/practice', practiceRoutes);
+  console.log('Practice routes registered.');
+
+  app.use('/api/ai', aiRoutes);
+  console.log('AI routes registered.');
+  
   app.use('/api/attempts', attemptRoutes);
   app.use('/api/answers', answerRoutes);
-  app.use('/api/enrollments', enrollmentRoutes);
-  app.use('/api/connections', connectionRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/analytics', analyticsRoutes);
   app.use('/api/grade-card', gradeCardRoutes);
