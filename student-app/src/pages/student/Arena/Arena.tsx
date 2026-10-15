@@ -45,10 +45,30 @@ const Arena = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [matchResult, setMatchResult] = useState<any>(null);
   const [playersInQueue, setPlayersInQueue] = useState(0);
-  const [queuePosition, setQueuePosition] = useState(1);
+  const [queueElapsed, setQueueElapsed] = useState(0);
 
   // Keep opponentId in a ref to avoid stale closures in socket callbacks
   const opponentIdRef = useRef<string | null>(null);
+
+  // Queue elapsed timer
+  useEffect(() => {
+    let timer: any;
+    if (gameState === 'QUEUED') {
+      setQueueElapsed(0);
+      timer = setInterval(() => {
+        setQueueElapsed(prev => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [gameState]);
+
+  const formatElapsed = (sec: number) => {
+    const mins = Math.floor(sec / 60);
+    const secs = sec % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   // Initialize socket connection once
   useEffect(() => {
@@ -73,9 +93,6 @@ const Arena = () => {
     newSocket.on('queue_status', (data) => {
       console.log('[Arena] Queue status update:', data);
       setPlayersInQueue(data.playersInQueue || 1);
-      if (data.queuePosition) {
-        setQueuePosition(data.queuePosition);
-      }
     });
 
     newSocket.on('match_found', async (data) => {
@@ -244,14 +261,16 @@ const Arena = () => {
   if (gameState === 'QUEUED') {
     return (
       <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center bg-background rounded-xl border border-white/10 overflow-hidden">
-        <div className="relative mb-12">
+        <div className="relative mb-10">
           <div className="absolute inset-0 bg-primary/20 blur-[100px] rounded-full"></div>
           <Loader2 className="h-24 w-24 text-primary animate-spin relative z-10" />
         </div>
-        <h2 className="text-2xl font-bold font-mono tracking-widest mb-4">SEARCHING FOR OPPONENT...</h2>
-        <p className="text-muted-foreground mb-2">Position in Queue: #{queuePosition} &bull; {playersInQueue} player(s) waiting</p>
-        <p className="text-xs text-muted-foreground/70 mb-8 font-mono">Pairs matched in order of click time (FIFO)</p>
-        <Button variant="outline" onClick={leaveQueue} className="border-destructive text-destructive hover:bg-destructive/10">
+        <h2 className="text-2xl font-bold font-mono tracking-widest mb-3">SEARCHING FOR OPPONENT...</h2>
+        <p className="text-muted-foreground text-sm mb-2">Finding a worthy opponent near your rating</p>
+        <p className="text-xs font-mono text-primary/80 mb-8">
+          Time elapsed: {formatElapsed(queueElapsed)} &bull; Estimated wait: ~0:15
+        </p>
+        <Button variant="outline" onClick={leaveQueue} className="border-destructive/60 text-destructive hover:bg-destructive/10 px-6">
           Cancel Search
         </Button>
       </div>
