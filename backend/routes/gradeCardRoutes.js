@@ -35,25 +35,63 @@ router.get('/:classId', authenticateToken, async (req, res) => {
     // 3. Fetch all attempted quizzes for this student in this class
     const [attemptedQuizzes] = await connection.query(
       `SELECT 
+         qa.id,
+         qa.quizId,
          q.title as quizTitle,
          qa.score,
          qa.totalPoints,
-         qa.submittedAt
+         qa.submittedAt,
+         qa.startedAt
        FROM quiz_attempts qa
        JOIN quizzes q ON qa.quizId = q.id
        WHERE qa.studentId = ? AND q.classId = ? AND qa.isCompleted = TRUE
-       ORDER BY qa.submittedAt DESC`,
+       ORDER BY qa.quizId, qa.submittedAt ASC`,
       [studentId, classId]
     );
 
-    // 4. Calculate average score
-    let totalScoreSum = 0;
-    let totalPossiblePointsSum = 0;
-    attemptedQuizzes.forEach(attempt => {
-      totalScoreSum += attempt.score;
-      totalPossiblePointsSum += attempt.totalPoints;
+    // Group attempts by quizId
+    const attemptsByQuiz = {};
+    attemptedQuizzes.forEach(att => {
+      if (!attemptsByQuiz[att.quizId]) attemptsByQuiz[att.quizId] = [];
+      attemptsByQuiz[att.quizId].push(att);
     });
-    const averageScore = totalPossiblePointsSum > 0 ? (totalScoreSum / totalPossiblePointsSum) * 100 : 0;
+
+    const enrichedAttempts = [];
+    let totalBestScoreSum = 0;
+    let totalBestPossibleSum = 0;
+
+    Object.keys(attemptsByQuiz).forEach(qId => {
+      const quizAtts = [...attemptsByQuiz[qId]].sort((a, b) =>
+        new Date(a.submittedAt || a.startedAt).getTime() - new Date(b.submittedAt || b.startedAt).getTime()
+      );
+
+      let bestPct = -1;
+      quizAtts.forEach(a => {
+        const pct = a.totalPoints > 0 ? (a.score / a.totalPoints) * 100 : 0;
+        if (pct > bestPct) bestPct = pct;
+      });
+
+      const bestAtt = quizAtts.reduce((prev, curr) => (curr.score > prev.score ? curr : prev), quizAtts[0]);
+      totalBestScoreSum += bestAtt.score;
+      totalBestPossibleSum += bestAtt.totalPoints;
+
+      quizAtts.forEach((a, idx) => {
+        const pct = a.totalPoints > 0 ? (a.score / a.totalPoints) * 100 : 0;
+        enrichedAttempts.push({
+          ...a,
+          attemptNumber: idx + 1,
+          percentage: pct,
+          isLatest: idx === quizAtts.length - 1,
+          isBest: Math.round(pct) === Math.round(bestPct) && bestPct >= 0
+        });
+      });
+    });
+
+    // Sort newest attempts first for PDF list
+    enrichedAttempts.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+    // 4. Calculate average score using best score per unique quiz
+    const averageScore = totalBestPossibleSum > 0 ? (totalBestScoreSum / totalBestPossibleSum) * 100 : 0;
 
     // 5. Fetch student's rank in the class leaderboard
     const [leaderboardRows] = await connection.query(
@@ -74,25 +112,30 @@ router.get('/:classId', authenticateToken, async (req, res) => {
     doc.text(`Student ID: ${student.id}`);
     doc.text(`Class: ${className}`).moveDown();
 
-    doc.fontSize(18).text('Quiz Performance', { underline: true }).moveDown();
+    doc.fontSize(18).text('Quiz Performance & Attempt History', { underline: true }).moveDown();
 
-    if (attemptedQuizzes.length === 0) {
+    if (enrichedAttempts.length === 0) {
       doc.fontSize(12).text('No quizzes attempted in this class yet.');
     } else {
-      attemptedQuizzes.forEach(attempt => {
-        const percentage = attempt.totalPoints > 0 ? (attempt.score / attempt.totalPoints) * 100 : 0;
-        doc.fontSize(14).text(`Quiz: ${attempt.quizTitle}`);
-        doc.fontSize(12).text(`  Score: ${attempt.score} / ${attempt.totalPoints} (${percentage.toFixed(2)}%)`);
-        doc.text(`  Submitted: ${new Date(attempt.submittedAt).toLocaleDateString()}`).moveDown();
+      enrichedAttempts.forEach(attempt => {
+        const tags = [];
+        if (attempt.isBest) tags.push('Best Score');
+        if (attempt.isLatest) tags.push('Latest Attempt');
+        const tagStr = tags.length > 0 ? ` [${tags.join(', ')}]` : '';
+
+        doc.fontSize(14).text(`Quiz: ${attempt.quizTitle} (Attempt #${attempt.attemptNumber}${tagStr})`);
+        doc.fontSize(12).text(`  Score: ${attempt.score} / ${attempt.totalPoints} (${attempt.percentage.toFixed(2)}%)`);
+        doc.text(`  Submitted: ${new Date(attempt.submittedAt).toLocaleString()}`).moveDown();
       });
     }
 
     doc.moveDown();
-    doc.fontSize(18).text('Overall Summary', { underline: true }).moveDown();
-    doc.fontSize(14).text(`Average Score: ${averageScore.toFixed(2)}%`);
-    doc.text(`Your Rank in Class: ${studentRank}`).moveDown();
+    doc.fontSize(18).text('Overall Academic Summary', { underline: true }).moveDown();
+    doc.fontSize(14).text(`Average Score (Best per quiz): ${averageScore.toFixed(2)}%`);
+    doc.fontSize(12).text(`Total Quizzes Evaluated: ${Object.keys(attemptsByQuiz).length} (${enrichedAttempts.length} total attempts)`);
+    doc.fontSize(14).text(`Your Rank in Class: ${studentRank}`).moveDown();
 
-    doc.fontSize(12).text('Teacher Remarks: (To be added by teacher)').moveDown(); // Placeholder for teacher remarks
+    doc.fontSize(12).text('Teacher Remarks: Verified academic record from EduQuiz.').moveDown();
 
     doc.end();
 

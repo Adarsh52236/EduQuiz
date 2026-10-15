@@ -51,6 +51,8 @@ router.get('/', authenticateToken, async (req, res) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
+    query += ` ORDER BY qa.submittedAt DESC NULLS LAST, qa.startedAt DESC`;
+
     const [rows] = await db.pool.query(query, queryParams);
     res.status(200).json(rows);
   } catch (error) {
@@ -343,10 +345,14 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
     // Update leaderboard if class exists
     if (classId) {
       const [studentTotalScoreRows] = await connection.query(
-        `SELECT SUM(qa.score) as totalScore
-         FROM quiz_attempts qa
-         JOIN quizzes q ON qa.quizId = q.id
-         WHERE qa.studentId = ? AND q.classId = ? AND qa.isCompleted = TRUE`,
+        `SELECT SUM(best_score) as totalScore
+         FROM (
+           SELECT MAX(qa.score) as best_score
+           FROM quiz_attempts qa
+           JOIN quizzes q ON qa.quizId = q.id
+           WHERE qa.studentId = ? AND q.classId = ? AND qa.isCompleted = TRUE
+           GROUP BY qa.quizId
+         ) sub`,
         [studentId, classId]
       );
       const studentTotalScore = studentTotalScoreRows[0]?.totalScore || 0;

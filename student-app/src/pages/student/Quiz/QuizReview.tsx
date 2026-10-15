@@ -33,15 +33,30 @@ interface QuizReviewData {
   questions: QuestionReview[];
 }
 
+interface AttemptSummary {
+  id: string;
+  attemptNumber: number;
+  score: number;
+  totalPoints: number;
+  percentage: number;
+  submittedAt: string;
+  timeTaken: number;
+  isLatest: boolean;
+  isBest: boolean;
+}
+
 const QuizReview = () => {
   const { quizId } = useParams<{ quizId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [reviewData, setReviewData] = useState<QuizReviewData | null>(null);
+  const [allAttempts, setAllAttempts] = useState<AttemptSummary[]>([]);
+  const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
   const [votedImpQuestions, setVotedImpQuestions] = useState<Set<string>>(new Set());
   const [impCounts, setImpCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingAttempt, setIsLoadingAttempt] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleToggleImp = async (questionId: string) => {
@@ -81,43 +96,87 @@ const QuizReview = () => {
     
     try {
       const token = localStorage.getItem('token');
-      const attemptId = searchParams.get('attemptId');
+      const urlAttemptId = searchParams.get('attemptId');
 
-      if (!attemptId) {
-        // If no attemptId, get the most recent attempt for this quiz
-        const attemptsResponse = await fetch(`/api/attempts?quizId=${quizId}&isCompleted=true`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!attemptsResponse.ok) {
-          throw new Error('Failed to load quiz attempts');
+      // Fetch all completed attempts for this quiz
+      const attemptsResponse = await fetch(`/api/attempts?quizId=${quizId}&isCompleted=true`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
+      });
 
-        const attempts = await attemptsResponse.json();
-        if (attempts.length === 0) {
-          setError('No completed attempts found for this quiz');
-          setIsLoading(false);
-          return;
-        }
-
-        // Use the most recent attempt
-        const latestAttempt = attempts.sort((a: any, b: any) => 
-          new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
-        )[0];
-        
-        await loadAttemptDetails(latestAttempt.id, token!);
-      } else {
-        await loadAttemptDetails(attemptId, token!);
+      if (!attemptsResponse.ok) {
+        throw new Error('Failed to load quiz attempts');
       }
+
+      const rawAttempts = await attemptsResponse.json();
+      const completedAttempts = rawAttempts.filter((a: any) => a.isCompleted);
+
+      if (completedAttempts.length === 0) {
+        setError('No completed attempts found for this quiz');
+        setIsLoading(false);
+        return;
+      }
+
+      // Sort chronologically (oldest first) to establish attempt numbers: #1, #2...
+      const chronological = [...completedAttempts].sort((a: any, b: any) => 
+        new Date(a.submittedAt || a.startedAt).getTime() - new Date(b.submittedAt || b.startedAt).getTime()
+      );
+
+      // Find highest score percentage
+      let highestPercent = -1;
+      chronological.forEach((a: any) => {
+        const pct = a.totalPoints > 0 ? (a.score / a.totalPoints) * 100 : 0;
+        if (pct > highestPercent) highestPercent = pct;
+      });
+
+      const processedAttempts: AttemptSummary[] = chronological.map((a: any, idx: number) => {
+        const pct = a.totalPoints > 0 ? Math.round((a.score / a.totalPoints) * 100) : 0;
+        return {
+          id: a.id,
+          attemptNumber: idx + 1,
+          score: a.score,
+          totalPoints: a.totalPoints,
+          percentage: pct,
+          submittedAt: a.submittedAt,
+          timeTaken: a.timeTaken,
+          isLatest: idx === chronological.length - 1,
+          isBest: pct === Math.round(highestPercent) && highestPercent >= 0
+        };
+      });
+
+      setAllAttempts(processedAttempts);
+
+      // Determine which attempt to view: URL attemptId if valid, else latest attempt
+      let targetAttemptId = urlAttemptId;
+      if (!targetAttemptId || !processedAttempts.some(a => a.id === targetAttemptId)) {
+        targetAttemptId = processedAttempts[processedAttempts.length - 1].id;
+      }
+
+      setCurrentAttemptId(targetAttemptId);
+      await loadAttemptDetails(targetAttemptId, token!);
     } catch (error: any) {
       console.error('Error loading review data:', error);
       setError(error.message || 'Failed to load quiz review');
       toast.error(error.message || 'Failed to load quiz review');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSelectAttempt = async (attemptId: string) => {
+    if (attemptId === currentAttemptId || isLoadingAttempt) return;
+    setIsLoadingAttempt(true);
+    setCurrentAttemptId(attemptId);
+    navigate(`/student/quiz/${quizId}/review?attemptId=${attemptId}`, { replace: true });
+    try {
+      const token = localStorage.getItem('token');
+      await loadAttemptDetails(attemptId, token!);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to switch attempt');
+    } finally {
+      setIsLoadingAttempt(false);
     }
   };
 
@@ -245,8 +304,10 @@ const QuizReview = () => {
     );
   }
 
+  const currentAttemptInfo = allAttempts.find(a => a.id === reviewData.attemptId);
+
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto p-4 max-w-4xl">
       <div className="mb-4">
         <Button variant="ghost" onClick={() => navigate('/student/quizzes')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -254,29 +315,111 @@ const QuizReview = () => {
         </Button>
       </div>
 
+      {/* Attempt History Switcher */}
+      {allAttempts.length > 1 && (
+        <div className="mb-6 p-4 rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div>
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <span>Quiz Attempt History</span>
+                <Badge variant="outline" className="text-xs font-normal">
+                  {allAttempts.length} Total Attempts
+                </Badge>
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Click any attempt to inspect its full answers, score breakdown, and questions.
+              </p>
+            </div>
+            {currentAttemptInfo && (
+              <div className="text-xs text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg border border-border/40 shrink-0">
+                Viewing: <span className="font-semibold text-foreground">Attempt #{currentAttemptInfo.attemptNumber}</span> ({currentAttemptInfo.percentage}%)
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            {allAttempts.map((att) => {
+              const isSelected = att.id === reviewData.attemptId;
+              return (
+                <button
+                  key={att.id}
+                  type="button"
+                  onClick={() => handleSelectAttempt(att.id)}
+                  disabled={isLoadingAttempt}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 border ${
+                    isSelected
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm ring-1 ring-primary/40'
+                      : 'bg-muted/30 hover:bg-muted/70 text-muted-foreground hover:text-foreground border-border/50'
+                  }`}
+                >
+                  <span className="font-semibold">Attempt #{att.attemptNumber}</span>
+                  <span className={`font-mono px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                    isSelected
+                      ? 'bg-black/20 text-white'
+                      : att.percentage >= 80 ? 'bg-emerald-500/10 text-emerald-400' : att.percentage >= 60 ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'
+                  }`}>
+                    {att.score}/{att.totalPoints} ({att.percentage}%)
+                  </span>
+                  {att.isBest && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Best
+                    </span>
+                  )}
+                  {att.isLatest && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      Latest
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <Card className="max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle className="flex justify-between items-center">
-            <span>Review: {reviewData.quizTitle}</span>
-            <div className="text-right">
-              <div className="text-2xl font-bold">
+          <CardTitle className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-xl sm:text-2xl font-bold">Review: {reviewData.quizTitle}</span>
+                {currentAttemptInfo && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    Attempt #{currentAttemptInfo.attemptNumber}
+                  </Badge>
+                )}
+                {currentAttemptInfo?.isLatest && (
+                  <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-300 border-blue-500/30">
+                    Latest Attempt
+                  </Badge>
+                )}
+                {currentAttemptInfo?.isBest && (
+                  <Badge variant="default" className="text-xs bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                    Best Score
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="text-left sm:text-right">
+              <div className="text-2xl sm:text-3xl font-bold font-mono">
                 {reviewData.score} / {reviewData.totalPoints}
               </div>
               <Badge 
                 variant={reviewData.percentage >= 80 ? 'default' : reviewData.percentage >= 60 ? 'secondary' : 'destructive'}
-                className="mt-1"
+                className="mt-1 text-sm px-2.5 py-0.5"
               >
                 {reviewData.percentage}%
               </Badge>
             </div>
           </CardTitle>
-          <div className="mt-4 text-sm text-muted-foreground">
-            Submitted: {new Date(reviewData.submittedAt).toLocaleString()} • 
-            Time Taken: {Math.round(reviewData.timeTaken / 60)} minutes
+          <div className="mt-3 text-sm text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+            <span>Submitted: {new Date(reviewData.submittedAt).toLocaleString()}</span>
+            <span>•</span>
+            <span>Time Taken: {Math.round(reviewData.timeTaken / 60)} minutes</span>
             {reviewData.timeUtilizationPercent !== null && (
               <>
-                {' '}
-                • Time Utilization: {reviewData.timeUtilizationPercent}%
+                <span>•</span>
+                <span>Time Utilization: {reviewData.timeUtilizationPercent}%</span>
               </>
             )}
           </div>

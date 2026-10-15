@@ -101,21 +101,40 @@ const StudentQuizzes = () => {
   };
 
   const getQuizAttemptInfo = (quizId: string) => {
-    const quizAttempts = attempts.filter(a => a.quizId === quizId);
-    if (quizAttempts.length === 0) {
+    // Sort chronological first to determine attempt numbers (Attempt #1, #2...)
+    const chronologicalAttempts = attempts
+      .filter(a => a.quizId === quizId && a.isCompleted)
+      .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+
+    if (chronologicalAttempts.length === 0) {
       return null;
     }
-    
-    const bestAttempt = quizAttempts.reduce((best, current) => {
-      const bestScore = best.score / best.totalPoints;
-      const currentScore = current.score / current.totalPoints;
+
+    const attemptsWithIndex = chronologicalAttempts.map((a, index) => ({
+      ...a,
+      attemptNumber: index + 1,
+      percentage: Math.round(((a.score || 0) / (a.totalPoints || 1)) * 100)
+    }));
+
+    // Newest attempt first for recent listings
+    const sortedDesc = [...attemptsWithIndex].reverse();
+
+    const bestAttempt = attemptsWithIndex.reduce((best, current) => {
+      const bestScore = (best.score || 0) / (best.totalPoints || 1);
+      const currentScore = (current.score || 0) / (current.totalPoints || 1);
       return currentScore > bestScore ? current : best;
-    });
+    }, attemptsWithIndex[0]);
+
+    const latestAttempt = sortedDesc[0];
 
     return {
-      bestScore: Math.round((bestAttempt.score / bestAttempt.totalPoints) * 100),
-      attemptsCount: quizAttempts.length,
-      lastAttempted: new Date(bestAttempt.submittedAt).toLocaleDateString()
+      bestScore: bestAttempt.percentage,
+      bestAttempt,
+      latestScore: latestAttempt.percentage,
+      latestAttempt,
+      attemptsCount: attemptsWithIndex.length,
+      allAttempts: sortedDesc, // newest first
+      lastAttempted: new Date(latestAttempt.submittedAt).toLocaleDateString()
     };
   };
 
@@ -140,10 +159,15 @@ const StudentQuizzes = () => {
   const completedQuizzes = filteredQuizzes.filter(q => {
     const attemptInfo = getQuizAttemptInfo(q.id);
     return attemptInfo !== null;
-  }).map(q => ({
-    quiz: q,
-    attempt: attempts.find(a => a.quizId === q.id && a.isCompleted)
-  }));
+  }).map(q => {
+    const attemptInfo = getQuizAttemptInfo(q.id)!;
+    return {
+      quiz: q,
+      attemptInfo,
+      latestAttempt: attemptInfo.latestAttempt,
+      attempts: attemptInfo.allAttempts
+    };
+  });
 
   const handleStartQuiz = (quizId: string) => {
     navigate(`/student/quiz/${quizId}`);
@@ -317,10 +341,19 @@ const StudentQuizzes = () => {
                           </div>
                         )}
                         {attemptInfo && (
-                          <div className="pt-2 border-t">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">Best Score</span>
-                              <Badge variant="secondary">{attemptInfo.bestScore}%</Badge>
+                          <div className="pt-2 border-t space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground font-medium">
+                                Attempts: {attemptInfo.attemptsCount}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="outline" className="text-xs">
+                                  Latest: {attemptInfo.latestScore}%
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                                  Best: {attemptInfo.bestScore}%
+                                </Badge>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -351,48 +384,115 @@ const StudentQuizzes = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
-              {completedQuizzes.map(({ quiz, attempt }) => {
-                if (!attempt) return null;
-                const scorePercentage = Math.round((attempt.score / attempt.totalPoints) * 100);
-
+            <div className="space-y-4">
+              {completedQuizzes.map(({ quiz, attemptInfo, latestAttempt, attempts }) => {
                 return (
-                  <Card key={quiz.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
+                  <Card key={quiz.id} className="border border-white/10 bg-card/60">
+                    <CardContent className="p-5">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
                         <div className="flex-1">
-                          <h4 className="font-semibold">{quiz.title}</h4>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <h4 className="font-bold text-lg text-white">{quiz.title}</h4>
+                            <Badge variant="outline" className="text-xs border-primary/30 text-primary">
+                              {attemptInfo.attemptsCount} {attemptInfo.attemptsCount === 1 ? 'Attempt' : 'Attempts'}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
                             {quiz.className && `${quiz.className} • `}
-                            Completed {new Date(attempt.submittedAt).toLocaleDateString()}
+                            Instructor: {quiz.teacherName || 'Instructor'} • Last taken on {new Date(latestAttempt.submittedAt).toLocaleDateString()}
                           </p>
                         </div>
-                        <div className="text-right ml-4">
-                          <Badge 
-                            variant={scorePercentage >= 70 ? 'default' : scorePercentage >= 50 ? 'secondary' : 'destructive'}
-                            className="text-lg px-3 py-1"
-                          >
-                            {scorePercentage}%
-                          </Badge>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {attempt.score} / {attempt.totalPoints} points
-                          </p>
+
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Latest Score</p>
+                            <Badge 
+                              variant={latestAttempt.percentage >= 70 ? 'default' : latestAttempt.percentage >= 50 ? 'secondary' : 'destructive'}
+                              className="text-base px-2.5 py-0.5 mt-0.5"
+                            >
+                              {latestAttempt.percentage}%
+                            </Badge>
+                          </div>
+                          <div className="text-right pl-3 border-l border-white/10">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Best Score</p>
+                            <Badge 
+                              variant={attemptInfo.bestScore >= 70 ? 'default' : attemptInfo.bestScore >= 50 ? 'secondary' : 'destructive'}
+                              className="text-base px-2.5 py-0.5 mt-0.5 bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                            >
+                              {attemptInfo.bestScore}%
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-3 flex gap-2">
+
+                      {/* All Attempts History Breakdown */}
+                      <div className="my-4">
+                        <p className="text-xs font-semibold text-slate-300 mb-2.5 flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          All Completed Attempts ({attempts.length}):
+                        </p>
+                        <div className="grid gap-2.5 sm:grid-cols-2">
+                          {attempts.map((att: any) => (
+                            <div 
+                              key={att.id}
+                              className="flex items-center justify-between p-3.5 rounded-lg bg-black/40 border border-white/5 hover:border-white/20 transition-all text-xs"
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-white text-sm">Attempt #{att.attemptNumber}</span>
+                                  {att.id === latestAttempt.id && (
+                                    <span className="text-[10px] bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 rounded font-medium">
+                                      Latest
+                                    </span>
+                                  )}
+                                  {att.percentage === attemptInfo.bestScore && (
+                                    <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-medium">
+                                      Best
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                  {new Date(att.submittedAt).toLocaleDateString()} at {new Date(att.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <span className={`font-bold text-base ${
+                                    att.percentage >= 70 ? 'text-emerald-400' : att.percentage >= 50 ? 'text-yellow-400' : 'text-rose-400'
+                                  }`}>
+                                    {att.percentage}%
+                                  </span>
+                                  <p className="text-[10px] text-slate-400">{att.score} / {att.totalPoints} pts</p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => navigate(`/student/quiz/${quiz.id}/review?attemptId=${att.id}`)}
+                                  className="h-8 text-xs border-white/10 hover:bg-white/10 px-3"
+                                >
+                                  Review
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-3 flex justify-end gap-2 border-t border-white/5">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => navigate(`/student/quiz/${quiz.id}/review?attemptId=${attempt.id}`)}
-                          className="flex-1"
+                          onClick={() => navigate(`/student/quiz/${quiz.id}/review?attemptId=${latestAttempt.id}`)}
+                          className="text-xs"
                         >
-                          View Results
+                          Review Latest ({latestAttempt.percentage}%)
                         </Button>
                         {quiz.status === 'Active' && (
                           <Button
                             size="sm"
                             onClick={() => handleStartQuiz(quiz.id)}
-                            className="flex-1"
+                            className="text-xs bg-primary hover:bg-primary/90"
                           >
                             Retake Quiz
                           </Button>

@@ -52,11 +52,13 @@ export function StudentGradeCard() {
   const [quizzes, setQuizzes] = useState<Record<string, Quiz>>({});
   const [stats, setStats] = useState({
     totalQuizzes: 0,
+    totalAttempts: 0,
     totalScore: 0,
     totalPossiblePoints: 0,
     averagePercentage: 0,
     rank: '-'
   });
+  const [enrichedAttempts, setEnrichedAttempts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchWithAuth = async (url: string, options?: RequestInit) => {
@@ -83,9 +85,11 @@ export function StudentGradeCard() {
       loadGradeData(selectedClassId);
     } else {
       setAttempts([]);
+      setEnrichedAttempts([]);
       setQuizzes({});
       setStats({
         totalQuizzes: 0,
+        totalAttempts: 0,
         totalScore: 0,
         totalPossiblePoints: 0,
         averagePercentage: 0,
@@ -112,12 +116,8 @@ export function StudentGradeCard() {
   const loadGradeData = async (classId: string) => {
     if (!user) return;
     try {
-      // Fetch completed attempts for the selected class
+      // Fetch completed attempts
       const attemptsData: QuizAttempt[] = await fetchWithAuth(`/api/attempts?isCompleted=true`);
-      const classAttempts = attemptsData.filter(attempt => {
-        const quiz = quizzes[attempt.quizId];
-        return quiz && quiz.classId === classId;
-      });
 
       // Fetch all quizzes
       const allQuizzes: Quiz[] = await fetchWithAuth('/api/quizzes');
@@ -127,26 +127,69 @@ export function StudentGradeCard() {
       });
       setQuizzes(quizMap);
 
-      // Filter attempts again after quizzes are loaded
+      // Filter attempts belonging to this classroom
       const filteredClassAttempts = attemptsData.filter(attempt => {
         const quiz = quizMap[attempt.quizId];
         return quiz && quiz.classId === classId;
       });
       setAttempts(filteredClassAttempts);
 
-      // Calculate statistics
-      const totalScore = filteredClassAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
-      const totalPossiblePoints = filteredClassAttempts.reduce((sum, a) => sum + a.totalPoints, 0);
-      const averagePercentage = totalPossiblePoints > 0 ? (totalScore / totalPossiblePoints) * 100 : 0;
+      // Group attempts by quizId to establish chronological attempt numbers & best score
+      const attemptsByQuiz: Record<string, QuizAttempt[]> = {};
+      filteredClassAttempts.forEach(att => {
+        if (!attemptsByQuiz[att.quizId]) attemptsByQuiz[att.quizId] = [];
+        attemptsByQuiz[att.quizId].push(att);
+      });
+
+      const processedAttempts: any[] = [];
+      let totalBestScore = 0;
+      let totalBestPossible = 0;
+      const uniqueQuizIds = Object.keys(attemptsByQuiz);
+
+      uniqueQuizIds.forEach(qId => {
+        const quizAtts = [...attemptsByQuiz[qId]].sort((a, b) => 
+          new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime()
+        );
+
+        let bestPct = -1;
+        quizAtts.forEach(a => {
+          const pct = a.totalPoints > 0 ? (a.score / a.totalPoints) * 100 : 0;
+          if (pct > bestPct) bestPct = pct;
+        });
+
+        // Best attempt gives points for this quiz
+        const bestAtt = quizAtts.reduce((prev, curr) => (curr.score > prev.score ? curr : prev), quizAtts[0]);
+        totalBestScore += bestAtt.score;
+        totalBestPossible += bestAtt.totalPoints;
+
+        quizAtts.forEach((a, idx) => {
+          const pct = a.totalPoints > 0 ? Math.round((a.score / a.totalPoints) * 100) : 0;
+          processedAttempts.push({
+            ...a,
+            attemptNumber: idx + 1,
+            percentage: pct,
+            isLatest: idx === quizAtts.length - 1,
+            isBest: pct === Math.round(bestPct) && bestPct >= 0
+          });
+        });
+      });
+
+      // Show attempts sorted newest first
+      processedAttempts.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+      setEnrichedAttempts(processedAttempts);
+
+      // Academic performance based on best score per quiz
+      const averagePercentage = totalBestPossible > 0 ? (totalBestScore / totalBestPossible) * 100 : 0;
 
       // Fetch student's rank for the selected class
       const myPerformanceData = await fetchWithAuth(`/api/analytics/my-performance/${classId}`);
       const studentRank = myPerformanceData?.myPerformance?.student_rank || '-';
 
       setStats({
-        totalQuizzes: filteredClassAttempts.length,
-        totalScore,
-        totalPossiblePoints,
+        totalQuizzes: uniqueQuizIds.length,
+        totalAttempts: filteredClassAttempts.length,
+        totalScore: totalBestScore,
+        totalPossiblePoints: totalBestPossible,
         averagePercentage: Math.round(averagePercentage),
         rank: studentRank
       });
@@ -279,7 +322,9 @@ export function StudentGradeCard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-blue-600">{stats.totalQuizzes}</div>
-                <p className="text-xs text-muted-foreground mt-1">Completed attempts</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.totalAttempts} {stats.totalAttempts === 1 ? 'attempt' : 'attempts'} completed
+                </p>
               </CardContent>
             </Card>
 
@@ -290,7 +335,7 @@ export function StudentGradeCard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-purple-600">{stats.totalScore}</div>
-                <p className="text-xs text-muted-foreground mt-1">Points earned</p>
+                <p className="text-xs text-muted-foreground mt-1">Best score points</p>
               </CardContent>
             </Card>
 
@@ -301,7 +346,7 @@ export function StudentGradeCard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">{stats.totalPossiblePoints}</div>
-                <p className="text-xs text-muted-foreground mt-1">Maximum points</p>
+                <p className="text-xs text-muted-foreground mt-1">Unique quiz points</p>
               </CardContent>
             </Card>
 
@@ -320,7 +365,7 @@ export function StudentGradeCard() {
                     ></div>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Overall performance</p>
+                <p className="text-xs text-muted-foreground mt-1">Based on best attempts</p>
               </CardContent>
             </Card>
           </div>
@@ -367,12 +412,12 @@ export function StudentGradeCard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Award className="h-5 w-5 text-blue-500" />
-            Quiz Results
+            Quiz Results & Attempts
           </CardTitle>
-          <CardDescription>Detailed breakdown of your quiz performances for the selected class</CardDescription>
+          <CardDescription>Detailed breakdown of all your quiz attempts and scores for the selected class</CardDescription>
         </CardHeader>
         <CardContent>
-          {attempts.length === 0 ? (
+          {enrichedAttempts.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Award className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="font-medium">No completed quizzes yet</p>
@@ -380,42 +425,62 @@ export function StudentGradeCard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {attempts.map((attempt) => {
+              {enrichedAttempts.map((attempt) => {
                 const quiz = quizzes[attempt.quizId];
-                const percentage = attempt.totalPoints > 0 ? (attempt.score / attempt.totalPoints) * 100 : 0;
                 
                 return (
                   <Card key={attempt.id} className="hover:shadow-md transition-shadow border-2 hover:border-primary/50">
                     <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="p-2 bg-primary/10 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-primary/10 rounded-lg mt-0.5 shrink-0">
                               <Award className="h-4 w-4 text-primary" />
                             </div>
                             <div>
-                              <h4 className="font-semibold text-lg">{quiz?.title || 'Quiz'}</h4>
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <h4 className="font-semibold text-lg">{quiz?.title || 'Quiz'}</h4>
+                                <Badge variant="outline" className="font-mono text-xs">
+                                  Attempt #{attempt.attemptNumber}
+                                </Badge>
+                                {attempt.isLatest && (
+                                  <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-300 border-blue-500/30">
+                                    Latest
+                                  </Badge>
+                                )}
+                                {attempt.isBest && (
+                                  <Badge variant="default" className="text-xs bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                                    Best Score
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-sm text-muted-foreground">
                                 Completed on {new Date(attempt.submittedAt).toLocaleDateString('en-US', { 
                                   year: 'numeric', 
-                                  month: 'long', 
+                                  month: 'short', 
                                   day: 'numeric' 
-                                })}
+                                })} at {new Date(attempt.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4">
+
+                        <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
                           <div className="text-right">
-                            <p className="text-xs text-muted-foreground mb-1">Score</p>
-                            <p className="font-bold text-lg">{attempt.score} / {attempt.totalPoints}</p>
+                            <p className="text-xs text-muted-foreground mb-0.5">Score</p>
+                            <p className="font-bold text-lg font-mono">{attempt.score} / {attempt.totalPoints}</p>
                           </div>
                           <Badge 
-                            variant={percentage >= 90 ? 'default' : percentage >= 70 ? 'secondary' : 'outline'}
-                            className="text-base px-3 py-1"
+                            variant={attempt.percentage >= 90 ? 'default' : attempt.percentage >= 70 ? 'secondary' : 'outline'}
+                            className="text-base px-3 py-1 font-mono font-bold"
                           >
-                            {Math.round(percentage)}%
+                            {attempt.percentage}%
                           </Badge>
+                          <Link to={`/student/quiz/${attempt.quizId}/review?attemptId=${attempt.id}`}>
+                            <Button size="sm" variant="outline" className="text-xs">
+                              Review
+                            </Button>
+                          </Link>
                         </div>
                       </div>
                     </CardContent>
