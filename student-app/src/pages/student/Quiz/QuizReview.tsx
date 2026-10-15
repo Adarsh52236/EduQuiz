@@ -56,7 +56,6 @@ const QuizReview = () => {
   const [votedImpQuestions, setVotedImpQuestions] = useState<Set<string>>(new Set());
   const [impCounts, setImpCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingAttempt, setIsLoadingAttempt] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleToggleImp = async (questionId: string) => {
@@ -88,7 +87,7 @@ const QuizReview = () => {
   useEffect(() => {
     if (!quizId || !user) return;
     loadReviewData();
-  }, [quizId, user]);
+  }, [quizId, user, searchParams]);
 
   const loadReviewData = async () => {
     setIsLoading(true);
@@ -162,21 +161,6 @@ const QuizReview = () => {
       toast.error(error.message || 'Failed to load quiz review');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleSelectAttempt = async (attemptId: string) => {
-    if (attemptId === currentAttemptId || isLoadingAttempt) return;
-    setIsLoadingAttempt(true);
-    setCurrentAttemptId(attemptId);
-    navigate(`/student/quiz/${quizId}/review?attemptId=${attemptId}`, { replace: true });
-    try {
-      const token = localStorage.getItem('token');
-      await loadAttemptDetails(attemptId, token!);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to switch attempt');
-    } finally {
-      setIsLoadingAttempt(false);
     }
   };
 
@@ -314,68 +298,6 @@ const QuizReview = () => {
           Back to Quizzes
         </Button>
       </div>
-
-      {/* Attempt History Switcher */}
-      {allAttempts.length > 1 && (
-        <div className="mb-6 p-4 rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-            <div>
-              <h4 className="text-sm font-semibold flex items-center gap-2">
-                <span>Quiz Attempt History</span>
-                <Badge variant="outline" className="text-xs font-normal">
-                  {allAttempts.length} Total Attempts
-                </Badge>
-              </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Click any attempt to inspect its full answers, score breakdown, and questions.
-              </p>
-            </div>
-            {currentAttemptInfo && (
-              <div className="text-xs text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg border border-border/40 shrink-0">
-                Viewing: <span className="font-semibold text-foreground">Attempt #{currentAttemptInfo.attemptNumber}</span> ({currentAttemptInfo.percentage}%)
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2.5">
-            {allAttempts.map((att) => {
-              const isSelected = att.id === reviewData.attemptId;
-              return (
-                <button
-                  key={att.id}
-                  type="button"
-                  onClick={() => handleSelectAttempt(att.id)}
-                  disabled={isLoadingAttempt}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 border ${
-                    isSelected
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm ring-1 ring-primary/40'
-                      : 'bg-muted/30 hover:bg-muted/70 text-muted-foreground hover:text-foreground border-border/50'
-                  }`}
-                >
-                  <span className="font-semibold">Attempt #{att.attemptNumber}</span>
-                  <span className={`font-mono px-1.5 py-0.5 rounded text-[11px] font-bold ${
-                    isSelected
-                      ? 'bg-black/20 text-white'
-                      : att.percentage >= 80 ? 'bg-emerald-500/10 text-emerald-400' : att.percentage >= 60 ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'
-                  }`}>
-                    {att.score}/{att.totalPoints} ({att.percentage}%)
-                  </span>
-                  {att.isBest && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Best
-                    </span>
-                  )}
-                  {att.isLatest && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      Latest
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <Card className="max-w-4xl mx-auto">
         <CardHeader>
