@@ -55,9 +55,10 @@ io.use((socket, next) => {
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    socket.userId = decoded.userId;
+    socket.userId = decoded.userId || decoded.id;
     socket.userRole = decoded.role;
-    console.log(`Socket authenticated: ${decoded.userId} (${decoded.role})`);
+    socket.user = decoded;
+    console.log(`Socket authenticated: ${socket.userId} (${decoded.role})`);
     next();
   } catch (err) {
     console.error('Socket authentication failed:', err.message);

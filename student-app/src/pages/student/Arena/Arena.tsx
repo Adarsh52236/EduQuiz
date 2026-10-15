@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,7 +29,11 @@ const Arena = () => {
   
   const [roomId, setRoomId] = useState<string | null>(null);
   const [opponentId, setOpponentId] = useState<string | null>(null);
+  const [opponentName, setOpponentName] = useState<string>('Opponent');
+  const [opponentElo, setOpponentElo] = useState<number>(1200);
+  const [myElo, setMyElo] = useState<number>(1250);
   const [quizId, setQuizId] = useState<string | null>(null);
+  const [quizTitle, setQuizTitle] = useState<string>('Live Battle');
   const [attemptId, setAttemptId] = useState<string | null>(null);
   
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -41,8 +45,12 @@ const Arena = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [matchResult, setMatchResult] = useState<any>(null);
   const [playersInQueue, setPlayersInQueue] = useState(0);
+  const [queuePosition, setQueuePosition] = useState(1);
 
-  // Initialize socket connection
+  // Keep opponentId in a ref to avoid stale closures in socket callbacks
+  const opponentIdRef = useRef<string | null>(null);
+
+  // Initialize socket connection once
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -59,35 +67,47 @@ const Arena = () => {
     });
 
     newSocket.on('connect', () => {
-      console.log('Connected to Arena server');
+      console.log('[Arena] Connected to Arena socket server');
     });
 
     newSocket.on('queue_status', (data) => {
-      setPlayersInQueue(data.playersInQueue);
+      console.log('[Arena] Queue status update:', data);
+      setPlayersInQueue(data.playersInQueue || 1);
+      if (data.queuePosition) {
+        setQueuePosition(data.queuePosition);
+      }
     });
 
     newSocket.on('match_found', async (data) => {
-      console.log('Match found!', data);
+      console.log('[Arena] Match found payload:', data);
       setRoomId(data.roomId);
       setOpponentId(data.opponentId);
+      opponentIdRef.current = data.opponentId;
+      setOpponentName(data.opponentName || 'Opponent');
+      setOpponentElo(data.opponentElo || 1200);
+      setMyElo(data.myElo || user?.eloRating || 1250);
       setQuizId(data.quizId);
+      if (data.quizTitle) {
+        setQuizTitle(data.quizTitle);
+      }
       setGameState('MATCH_FOUND');
       
-      // Auto-join the battle room
+      // Auto-join the battle room for real-time signaling
       newSocket.emit('join_arena_room', data.roomId);
       
-      // Load battle data
+      // Load battle quiz data
       await loadBattleData(data.quizId, token);
     });
 
     newSocket.on('opponent_progress', (data) => {
-      if (data.opponentId === opponentId) {
+      console.log('[Arena] Opponent progress received:', data);
+      if (!opponentIdRef.current || data.opponentId === opponentIdRef.current) {
         setOpponentProgress(data.currentQuestionIndex);
       }
     });
 
     newSocket.on('arena_error', (data) => {
-      toast.error(data.message);
+      toast.error(data.message || 'Arena matchmaking error');
       setGameState('IDLE');
     });
 
@@ -96,12 +116,15 @@ const Arena = () => {
     return () => {
       newSocket.disconnect();
     };
-  }, [navigate, opponentId]);
+  }, [navigate]);
 
   const joinQueue = () => {
     if (socket) {
       setGameState('QUEUED');
-      socket.emit('join_arena_queue', { eloRating: 1500 });
+      socket.emit('join_arena_queue', { 
+        eloRating: user?.eloRating || 1250,
+        clickTime: Date.now()
+      });
       toast.info('Entered matchmaking queue...');
     }
   };
@@ -134,7 +157,7 @@ const Arena = () => {
       const attemptData = await attemptRes.json();
       setAttemptId(attemptData.id);
 
-      // Give players 3 seconds to get ready
+      // Give players 3 seconds countdown to view matchup
       setTimeout(() => {
         setGameState('BATTLE');
         toast.success('BATTLE START!', { icon: '⚔️' });
@@ -155,7 +178,7 @@ const Arena = () => {
     const newIndex = currentIndex + 1;
     setMyProgress(newIndex);
     
-    // Broadcast progress
+    // Broadcast progress to opponent in real-time
     if (socket && roomId) {
       socket.emit('arena_progress', { roomId, currentQuestionIndex: newIndex, score: 0 });
     }
@@ -208,7 +231,7 @@ const Arena = () => {
             <Swords className="h-10 w-10 text-primary" />
           </div>
           <h1 className="text-4xl font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-primary to-cyan-400 mb-2">Live Arena</h1>
-          <p className="text-muted-foreground mb-8">Test your skills in real-time 1v1 algorithmic combat.</p>
+          <p className="text-muted-foreground mb-8">Test your skills in real-time 1v1 algorithmic combat against fellow students.</p>
           
           <Button onClick={joinQueue} className="w-full h-14 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all hover:scale-[1.02]">
             Enter Matchmaking
@@ -226,7 +249,8 @@ const Arena = () => {
           <Loader2 className="h-24 w-24 text-primary animate-spin relative z-10" />
         </div>
         <h2 className="text-2xl font-bold font-mono tracking-widest mb-4">SEARCHING FOR OPPONENT...</h2>
-        <p className="text-muted-foreground mb-8">Estimated Wait: 0:15 &bull; {playersInQueue} in queue</p>
+        <p className="text-muted-foreground mb-2">Position in Queue: #{queuePosition} &bull; {playersInQueue} player(s) waiting</p>
+        <p className="text-xs text-muted-foreground/70 mb-8 font-mono">Pairs matched in order of click time (FIFO)</p>
         <Button variant="outline" onClick={leaveQueue} className="border-destructive text-destructive hover:bg-destructive/10">
           Cancel Search
         </Button>
@@ -237,22 +261,26 @@ const Arena = () => {
   if (gameState === 'MATCH_FOUND') {
     return (
       <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center bg-background rounded-xl border border-white/10 overflow-hidden animate-fade-in">
-        <h1 className="text-5xl font-black uppercase tracking-widest text-destructive mb-16 animate-pulse shadow-destructive/50 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">
+        <h1 className="text-5xl font-black uppercase tracking-widest text-destructive mb-6 animate-pulse shadow-destructive/50 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">
           MATCH FOUND
         </h1>
+        <p className="text-muted-foreground font-mono text-sm mb-12">Arena Subject: <span className="text-cyan-400 font-bold">{quizTitle}</span></p>
+
         <div className="flex items-center gap-12 mb-16">
           <div className="text-center">
-            <div className="w-32 h-32 bg-primary/20 rounded-xl border-2 border-primary flex items-center justify-center mb-4">
-              <span className="text-4xl font-bold text-primary">YOU</span>
+            <div className="w-36 h-36 bg-primary/20 rounded-xl border-2 border-primary flex flex-col items-center justify-center mb-4 px-2">
+              <span className="text-lg font-bold text-primary truncate max-w-[130px]">{user?.displayName || 'YOU'}</span>
+              <span className="text-xs uppercase tracking-wider text-primary/70 mt-1">Challenger</span>
             </div>
-            <p className="font-mono text-muted-foreground">Elo 1500</p>
+            <p className="font-mono text-muted-foreground text-sm">Elo {myElo}</p>
           </div>
           <div className="text-4xl font-black text-muted-foreground">VS</div>
           <div className="text-center">
-            <div className="w-32 h-32 bg-destructive/20 rounded-xl border-2 border-destructive flex items-center justify-center mb-4">
-              <span className="text-4xl font-bold text-destructive">OPP</span>
+            <div className="w-36 h-36 bg-destructive/20 rounded-xl border-2 border-destructive flex flex-col items-center justify-center mb-4 px-2">
+              <span className="text-lg font-bold text-destructive truncate max-w-[130px]">{opponentName}</span>
+              <span className="text-xs uppercase tracking-wider text-destructive/70 mt-1">Opponent</span>
             </div>
-            <p className="font-mono text-muted-foreground">Elo 1520</p>
+            <p className="font-mono text-muted-foreground text-sm">Elo {opponentElo}</p>
           </div>
         </div>
         <div className="text-2xl font-mono animate-bounce text-cyan-400">PREPARING ARENA...</div>
@@ -271,7 +299,7 @@ const Arena = () => {
           {/* Player 1 Progress */}
           <div className="flex-1 max-w-sm">
             <div className="flex justify-between text-sm font-mono mb-2">
-              <span className="text-primary font-bold">YOU</span>
+              <span className="text-primary font-bold truncate max-w-[180px]">{user?.displayName || 'YOU'}</span>
               <span className="text-primary">{myProgress} / {questions.length}</span>
             </div>
             <Progress value={(myProgress / questions.length) * 100} className="h-3 bg-primary/20 [&>div]:bg-primary" />
@@ -286,7 +314,7 @@ const Arena = () => {
           {/* Player 2 Progress */}
           <div className="flex-1 max-w-sm">
             <div className="flex justify-between text-sm font-mono mb-2">
-              <span className="text-destructive font-bold">OPPONENT</span>
+              <span className="text-destructive font-bold truncate max-w-[180px]">{opponentName}</span>
               <span className="text-destructive">{opponentProgress} / {questions.length}</span>
             </div>
             <Progress value={(opponentProgress / questions.length) * 100} className="h-3 bg-destructive/20 [&>div]:bg-destructive" />
@@ -299,7 +327,7 @@ const Arena = () => {
           <div className="w-1/2 border-r border-white/10 flex flex-col bg-black/20 p-8 overflow-y-auto custom-scrollbar">
             <div className="flex items-center gap-3 mb-8">
               <span className="px-3 py-1 rounded bg-white/10 font-mono text-sm uppercase tracking-wider">
-                Stage {currentIndex + 1}
+                Stage {currentIndex + 1} of {questions.length}
               </span>
               <span className="px-3 py-1 rounded bg-primary/10 text-primary border border-primary/20 font-mono text-sm">
                 {currentQ.points} XP
@@ -380,7 +408,6 @@ const Arena = () => {
   }
 
   if (gameState === 'FINISHED') {
-    const isWin = true; // Simplified for MVP since we don't know opponent's final score immediately here
     return (
       <div className="h-[calc(100vh-64px)] flex items-center justify-center bg-background">
         <div className="max-w-md w-full p-8 rounded-2xl bg-black/60 border border-primary/30 text-center shadow-[0_0_50px_rgba(139,92,246,0.1)] animate-fade-in">
