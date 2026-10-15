@@ -210,7 +210,7 @@ router.get('/daily-challenge', authenticateToken, async (req, res) => {
       [userId]
     );
     const hasAttemptedToday = todaySubRows.length > 0;
-    const todaySubmission = hasAttemptedToday ? todaySubRows[0] : null;
+    let todaySubmission = null;
 
     // 3. Deterministic Daily Challenge question from top IMP community questions
     // Dynamic cap: at most the number of active registered students, or system cap
@@ -245,6 +245,7 @@ router.get('/daily-challenge', authenticateToken, async (req, res) => {
     let dailyQuestion = null;
     if (qRows.length > 0) {
       const row = qRows[0];
+      const correctAns = row.correctAnswer || row.correctanswer;
       let options = row.options;
       if (typeof options === 'string') {
         try { options = JSON.parse(options); } catch (e) { options = []; }
@@ -264,8 +265,22 @@ router.get('/daily-challenge', authenticateToken, async (req, res) => {
         tags: Array.isArray(tags) ? tags : [],
         options: Array.isArray(options) ? options : [],
         impVotesCount: parseInt(row.impVotesCount || row.impvotescount, 10) || 14,
-        xpReward: 50
+        xpReward: 50,
+        // If already attempted, expose the correct answer so user can review
+        correctAnswer: hasAttemptedToday ? correctAns : undefined
       };
+
+      if (hasAttemptedToday) {
+        const rawSub = todaySubRows[0];
+        todaySubmission = {
+          id: rawSub.id,
+          isCorrect: Boolean(rawSub.isCorrect ?? rawSub.iscorrect),
+          selectedAnswer: rawSub.selectedAnswer ?? rawSub.selectedanswer,
+          xpAwarded: parseInt(rawSub.xpAwarded ?? rawSub.xpawarded, 10) || 0,
+          correctAnswer: correctAns,
+          createdAt: rawSub.createdAt ?? rawSub.createdat
+        };
+      }
     }
 
     res.status(200).json({
@@ -320,8 +335,9 @@ router.post('/daily-challenge/submit', authenticateToken, async (req, res) => {
     }
 
     const question = questions[0];
+    const expectedCorrect = question.correctAnswer || question.correctanswer;
     const cleanAnswer = String(answer).toLowerCase().trim();
-    const cleanCorrect = String(question.correctanswer).toLowerCase().trim();
+    const cleanCorrect = String(expectedCorrect || '').toLowerCase().trim();
     const isCorrect = cleanAnswer === cleanCorrect;
 
     // +50 XP for daily challenge completion if correct
@@ -379,7 +395,8 @@ router.post('/daily-challenge/submit', authenticateToken, async (req, res) => {
       isCorrect,
       xpGained,
       streakCount: newStreak,
-      correctAnswer: isCorrect ? null : question.correctanswer,
+      selectedAnswer: String(answer),
+      correctAnswer: expectedCorrect,
       message: isCorrect
         ? `Brilliant! +${xpGained} XP awarded and ${newStreak}-day streak maintained!`
         : `Answer recorded. Your ${newStreak}-day streak has been updated! Review the explanation below.`

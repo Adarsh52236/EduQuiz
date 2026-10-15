@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Swords, Code, Trophy, Target, Clock, Zap, BookOpen, Users, Plus, Trash2, GraduationCap, Loader2, Lock, CheckCircle2, Calendar, Play, Star, Search, Sparkles, Check, Flame, ArrowRight } from 'lucide-react';
+import { Swords, Code, Trophy, Target, Clock, Zap, BookOpen, Users, Plus, Trash2, GraduationCap, Loader2, Lock, CheckCircle2, XCircle, Eye, Calendar, Play, Star, Search, Sparkles, Check, Flame, ArrowRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -571,12 +571,71 @@ export default function StudentDashboard() {
             </div>
 
             {hasAttemptedDailyToday ? (
-              <div className="flex items-center gap-3 mt-1">
-                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-xs py-1.5 px-3 flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {todayDailySubmission?.isCorrect ? 'Completed Today (+50 XP)' : 'Attempted Today (Streak Maintained)'}
-                </Badge>
-                <span className="text-xs text-slate-400 font-medium">Next challenge unlocks at midnight! 🔥</span>
+              <div className="space-y-3 mt-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge className={`text-xs py-1.5 px-3 flex items-center gap-1.5 ${
+                    (todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect)
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  }`}>
+                    {(todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                        Correct (+50 XP Awarded)
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                        Incorrect (Streak Maintained)
+                      </>
+                    )}
+                  </Badge>
+                  <span className="text-xs text-slate-400 font-medium">Next challenge unlocks at midnight! 🔥</span>
+                </div>
+
+                {/* Submitted Answer Feedback Box */}
+                <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-slate-400 font-medium">Your Answer:</span>
+                      <span className={`font-semibold ${
+                        (todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        {todayDailySubmission?.selectedAnswer || todayDailySubmission?.selectedanswer || dailySubmitResult?.selectedAnswer || 'Submitted'}
+                      </span>
+                      {(todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) ? (
+                        <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                          Right ✓
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                          Wrong ✗
+                        </span>
+                      )}
+                    </div>
+
+                    {!(todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) && (todayDailySubmission?.correctAnswer || dailyChallenge?.correctAnswer || dailySubmitResult?.correctAnswer) && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs pt-1 border-t border-white/5">
+                        <span className="text-slate-400 font-medium">Correct Answer:</span>
+                        <span className="font-semibold text-emerald-400">
+                          {todayDailySubmission?.correctAnswer || dailyChallenge?.correctAnswer || dailySubmitResult?.correctAnswer}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedDailyAnswer(todayDailySubmission?.selectedAnswer || todayDailySubmission?.selectedanswer || dailySubmitResult?.selectedAnswer || '');
+                      setIsDailyChallengeModalOpen(true);
+                    }}
+                    className="h-8 text-xs border-white/10 hover:bg-white/10 text-slate-300 shrink-0 flex items-center gap-1.5"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Review Challenge
+                  </Button>
+                </div>
               </div>
             ) : dailyChallenge ? (
               <Button 
@@ -1212,26 +1271,61 @@ export default function StudentDashboard() {
           <div className="space-y-2.5 my-3">
             {dailyChallenge?.options && dailyChallenge.options.length > 0 ? (
               dailyChallenge.options.map((opt: string, idx: number) => {
-                const isSelected = selectedDailyAnswer === opt;
+                const userAns = todayDailySubmission?.selectedAnswer || todayDailySubmission?.selectedanswer || dailySubmitResult?.selectedAnswer || selectedDailyAnswer;
+                const correctAns = todayDailySubmission?.correctAnswer || dailyChallenge?.correctAnswer || dailySubmitResult?.correctAnswer;
+                const isSelected = selectedDailyAnswer === opt || userAns === opt;
+                const isSubmitted = hasAttemptedDailyToday || Boolean(dailySubmitResult);
+                const isUserAnswer = isSubmitted && userAns === opt;
+                const isCorrectOption = isSubmitted && correctAns === opt;
+                const isUserCorrect = (todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect);
+
+                let cardStyle = 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:border-slate-700';
+                if (isSubmitted) {
+                  if (isCorrectOption) {
+                    cardStyle = 'bg-emerald-500/15 border-emerald-500/60 text-emerald-200';
+                  } else if (isUserAnswer && !isUserCorrect) {
+                    cardStyle = 'bg-rose-500/15 border-rose-500/60 text-rose-200';
+                  } else {
+                    cardStyle = 'bg-slate-900/40 border-slate-800/50 text-slate-500 opacity-60';
+                  }
+                } else if (isSelected) {
+                  cardStyle = 'bg-cyan-500/20 border-cyan-500/50 text-cyan-200';
+                }
+
                 return (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => {
-                      if (!dailySubmitResult && !hasAttemptedDailyToday) setSelectedDailyAnswer(opt);
+                      if (!isSubmitted) setSelectedDailyAnswer(opt);
                     }}
-                    disabled={Boolean(dailySubmitResult) || hasAttemptedDailyToday}
-                    className={`w-full text-left p-3 rounded-lg text-xs font-medium transition-all border flex items-center justify-between ${
-                      isSelected
-                        ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-200'
-                        : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:border-slate-700'
-                    }`}
+                    disabled={isSubmitted}
+                    className={`w-full text-left p-3 rounded-lg text-xs font-medium transition-all border flex items-center justify-between ${cardStyle}`}
                   >
-                    <span>{opt}</span>
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      isSelected ? 'border-cyan-400 bg-cyan-400' : 'border-slate-600'
-                    }`}>
-                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
+                    <span className="pr-2">{opt}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isSubmitted && isCorrectOption && (
+                        <Badge className="bg-emerald-500/30 text-emerald-300 border-0 text-[10px] py-0 px-1.5 flex items-center gap-1">
+                          <Check className="h-3 w-3" /> Correct
+                        </Badge>
+                      )}
+                      {isSubmitted && isUserAnswer && !isUserCorrect && (
+                        <Badge className="bg-rose-500/30 text-rose-300 border-0 text-[10px] py-0 px-1.5 flex items-center gap-1">
+                          <XCircle className="h-3 w-3" /> Your Answer
+                        </Badge>
+                      )}
+                      {isSubmitted && isUserAnswer && isUserCorrect && (
+                        <Badge className="bg-emerald-500/30 text-emerald-300 border-0 text-[10px] py-0 px-1.5 flex items-center gap-1">
+                          Your Answer ✓
+                        </Badge>
+                      )}
+                      {!isSubmitted && (
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          isSelected ? 'border-cyan-400 bg-cyan-400' : 'border-slate-600'
+                        }`}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
+                        </div>
+                      )}
                     </div>
                   </button>
                 );
@@ -1247,23 +1341,44 @@ export default function StudentDashboard() {
             )}
           </div>
 
-          {/* Daily Submit Feedback */}
-          {dailySubmitResult && (
-            <div className={`p-3.5 rounded-lg border text-xs space-y-1 ${
-              dailySubmitResult.isCorrect 
+          {/* Daily Submit Feedback / Review State */}
+          {(dailySubmitResult || hasAttemptedDailyToday) && (
+            <div className={`p-3.5 rounded-lg border text-xs space-y-1.5 ${
+              (todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect)
                 ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-200'
-                : 'bg-orange-950/40 border-orange-800/50 text-orange-200'
+                : 'bg-rose-950/40 border-rose-800/50 text-rose-200'
             }`}>
               <div className="flex items-center gap-1.5 font-bold text-sm">
-                <CheckCircle2 className="h-4 w-4" />
-                <span>{dailySubmitResult.isCorrect ? `Correct! +${dailySubmitResult.xpGained} XP Awarded` : 'Attempt Recorded!'}</span>
+                {(todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <span>Solved Correctly! +50 XP Awarded</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 text-rose-400" />
+                    <span>Incorrect Answer Recorded (Streak Maintained)</span>
+                  </>
+                )}
               </div>
-              <p className="text-slate-300 text-xs">{dailySubmitResult.message}</p>
-              {!dailySubmitResult.isCorrect && dailySubmitResult.correctAnswer && (
-                <p className="text-slate-400 text-xs mt-1">
-                  Correct Answer: <span className="font-semibold text-emerald-400">{dailySubmitResult.correctAnswer}</span>
+              <div className="text-xs space-y-1 pt-1 border-t border-white/5">
+                <p className="text-slate-300">
+                  Your Answer:{' '}
+                  <span className={`font-semibold ${
+                    (todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {todayDailySubmission?.selectedAnswer || todayDailySubmission?.selectedanswer || dailySubmitResult?.selectedAnswer || selectedDailyAnswer}
+                  </span>
                 </p>
-              )}
+                {!(todayDailySubmission?.isCorrect ?? dailySubmitResult?.isCorrect) && (todayDailySubmission?.correctAnswer || dailyChallenge?.correctAnswer || dailySubmitResult?.correctAnswer) && (
+                  <p className="text-slate-300">
+                    Correct Answer:{' '}
+                    <span className="font-semibold text-emerald-400">
+                      {todayDailySubmission?.correctAnswer || dailyChallenge?.correctAnswer || dailySubmitResult?.correctAnswer}
+                    </span>
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
