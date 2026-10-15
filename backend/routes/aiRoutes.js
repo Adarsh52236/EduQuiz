@@ -123,4 +123,104 @@ router.post('/evaluate-answer', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================
+// POST /api/ai/generate-quiz
+// Generates a complete educational quiz using Groq LLM
+// ============================================
+router.post('/generate-quiz', authenticateToken, async (req, res) => {
+  try {
+    const { topic, numQuestions = 5, difficulty = 'Medium', classId } = req.body;
+    const userId = req.user.id;
+
+    if (!topic || !topic.trim()) {
+      return res.status(400).json({ message: 'Topic/Subject is required for quiz generation' });
+    }
+
+    const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.GROK_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({ message: 'Groq API Key not configured on server' });
+    }
+
+    const questionCount = Math.min(Math.max(parseInt(numQuestions, 10) || 5, 2), 10);
+
+    const prompt = `You are a distinguished university professor and assessment designer.
+Generate a high-quality educational quiz on the topic: "${topic.trim()}".
+Difficulty: ${difficulty}.
+Target Questions Count: ${questionCount}.
+
+Return STRICTLY valid JSON ONLY without any markdown fencing, preamble, or commentary.
+The JSON must follow this exact schema:
+{
+  "title": "Concise, professional title for the quiz",
+  "description": "Engaging 2-sentence description of the quiz content and objectives",
+  "category": "One of: Algorithms, Data Structures, Dynamic Programming, Databases & SQL, Operating Systems, Computer Networks, Mathematics & Logic, Web & Software Engineering, General CS",
+  "timeLimit": 20,
+  "questions": [
+    {
+      "questionText": "Clear, precise question prompt",
+      "questionType": "multiple-choice",
+      "points": 10,
+      "difficulty": "easy" | "medium" | "hard",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "Exact string matching one of the options",
+      "explanation": "Brief explanation of why this answer is correct",
+      "tags": ["topic-tag1", "topic-tag2"]
+    }
+  ]
+}`;
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: 'You are an AI assessment generator. Return raw, parseable JSON only conforming strictly to the requested schema.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 2500
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[Groq AI Quiz Error]:', errText);
+      return res.status(502).json({ message: 'Groq AI service error', details: errText });
+    }
+
+    const data = await response.json();
+    const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || data.choices?.[0]?.message?.content || '{}';
+
+    // Clean JSON content
+    const cleaned = rawContent
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim();
+
+    let quizData;
+    try {
+      quizData = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('Failed to parse Groq response:', cleaned);
+      return res.status(500).json({ message: 'Failed to parse AI generated quiz', raw: cleaned });
+    }
+
+    res.status(200).json({
+      success: true,
+      quiz: quizData
+    });
+
+  } catch (error) {
+    console.error('Error in /generate-quiz:', error);
+    res.status(500).json({ message: 'Error generating quiz with AI', error: error.message });
+  }
+});
+
 module.exports = router;

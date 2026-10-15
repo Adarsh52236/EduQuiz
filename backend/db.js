@@ -49,13 +49,47 @@ const camelCaseMap = {
   opponentid: 'opponentId',
   winnerid: 'winnerId',
   connectedstudentid: 'connectedStudentId',
+  connectedstudentname: 'connectedStudentName',
+  connectedstudentemail: 'connectedStudentEmail',
+  connectedstudentavatar: 'connectedStudentAvatar',
+  peerid: 'peerId',
   userid: 'userId',
   isread: 'isRead',
   globalxp: 'globalXp',
   elorating: 'eloRating',
   aifeedback: 'aiFeedback',
   matchtype: 'matchType',
-  roomid: 'roomId'
+  roomid: 'roomId',
+  resettoken: 'resetToken',
+  resettokenexpiry: 'resetTokenExpiry',
+  sharedbyteacherid: 'sharedByTeacherId',
+  sharedwithteacherid: 'sharedWithTeacherId',
+  canedit: 'canEdit',
+  creatorteacherid: 'creatorTeacherId',
+  tournamentid: 'tournamentId',
+  impvotescount: 'impVotesCount',
+  hasvotedimp: 'hasVotedImp',
+  teachername: 'teacherName',
+  classname: 'className',
+  classdescription: 'classDescription',
+  studentname: 'studentName',
+  studentemail: 'studentEmail',
+  teacheremail: 'teacherEmail',
+  quiztitle: 'quizTitle',
+  studentrank: 'studentRank',
+  student_rank: 'studentRank',
+  averagescore: 'averageScore',
+  maxscore: 'maxScore',
+  minscore: 'minScore',
+  challengedate: 'challengeDate',
+  selectedanswer: 'selectedAnswer',
+  xpawarded: 'xpAwarded',
+  streakcount: 'streakCount',
+  lastdailyquizdate: 'lastDailyQuizDate',
+  totalstudents: 'totalStudents',
+  totalattempts: 'totalAttempts',
+  participatingstudents: 'participatingStudents',
+  passcount: 'passCount'
 };
 
 function formatRows(rows) {
@@ -97,6 +131,15 @@ const poolWrapper = {
         const result = await client.query(pgText, params);
         return [formatRows(result.rows), result.fields];
       },
+      beginTransaction: async () => {
+        await client.query('BEGIN');
+      },
+      commit: async () => {
+        await client.query('COMMIT');
+      },
+      rollback: async () => {
+        await client.query('ROLLBACK');
+      },
       release: () => client.release()
     };
   }
@@ -111,11 +154,7 @@ async function initializeDatabase() {
 
     console.log('Creating/verifying database tables...');
 
-    // Drop tables to recreate with new schema (since we are pivoting on a fresh DB)
-    await client.query(`
-      DROP TABLE IF EXISTS notifications, student_connections, challenges, leaderboards, quiz_answers, quiz_attempts, quiz_questions, quizzes, class_enrollments, classes, users CASCADE;
-    `);
-    
+    // Ensure tables exist with appropriate schemas
     // Trigger function for updatedAt
     await client.query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -225,6 +264,22 @@ async function initializeDatabase() {
     `);
 
     await client.query(`
+      ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS category VARCHAR(100);
+      ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS tags JSONB;
+      ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS difficulty VARCHAR(50) DEFAULT 'medium';
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS question_imp_ratings (
+        id VARCHAR(255) PRIMARY KEY,
+        questionId VARCHAR(255) NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (questionId, studentId)
+      );
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS quiz_attempts (
         id VARCHAR(255) PRIMARY KEY,
         quizId VARCHAR(255) NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
@@ -307,6 +362,89 @@ async function initializeDatabase() {
         link VARCHAR(500),
         isRead BOOLEAN DEFAULT FALSE,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Teacher-to-Teacher Colleague Network
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS teacher_connections (
+        id VARCHAR(255) PRIMARY KEY,
+        teacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        connectedTeacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(50) CHECK(status IN ('pending', 'accepted', 'rejected')) DEFAULT 'pending',
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (teacherId, connectedTeacherId)
+      );
+    `);
+
+    // Quizzes shared between teacher colleagues
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shared_quizzes (
+        id VARCHAR(255) PRIMARY KEY,
+        quizId VARCHAR(255) NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        sharedByTeacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        sharedWithTeacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        canEdit BOOLEAN DEFAULT FALSE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (quizId, sharedWithTeacherId)
+      );
+    `);
+
+    // Inter-Class Tournaments
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournaments (
+        id VARCHAR(255) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        quizId VARCHAR(255) NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        creatorTeacherId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        startTime TIMESTAMP,
+        endTime TIMESTAMP,
+        status VARCHAR(50) CHECK(status IN ('upcoming', 'active', 'completed')) DEFAULT 'upcoming',
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournament_classes (
+        id VARCHAR(255) PRIMARY KEY,
+        tournamentId VARCHAR(255) NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        classId VARCHAR(255) NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        UNIQUE (tournamentId, classId)
+      );
+    `);
+
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS streakCount INT DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS lastDailyQuizDate DATE;
+    `);
+
+    // Daily Challenge Submissions (strict 1 attempt per day per student)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS daily_challenge_submissions (
+        id VARCHAR(255) PRIMARY KEY,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        questionId VARCHAR(255) NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
+        challengeDate DATE NOT NULL DEFAULT CURRENT_DATE,
+        selectedAnswer TEXT NOT NULL,
+        isCorrect BOOLEAN NOT NULL,
+        xpAwarded INT DEFAULT 0,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (studentId, challengeDate)
+      );
+    `);
+
+    // Practice Question Solves (tracks solved state & first-time XP to prevent replay farming)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS practice_question_solves (
+        id VARCHAR(255) PRIMARY KEY,
+        studentId VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        questionId VARCHAR(255) NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
+        selectedAnswer TEXT NOT NULL,
+        isCorrect BOOLEAN NOT NULL,
+        xpAwarded INT DEFAULT 0,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (studentId, questionId)
       );
     `);
 

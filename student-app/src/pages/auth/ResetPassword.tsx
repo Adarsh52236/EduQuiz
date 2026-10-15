@@ -60,13 +60,13 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-background">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/10 blur-[100px] rounded-full pointer-events-none" />
       
-      <div className="w-full max-w-md z-10 px-4">
+      <div className="w-full max-w-md z-10 px-[max(1cm,1.5rem)]">
         <div className="flex justify-center mb-8">
           <Link to="/" className="flex items-center gap-2 group">
             <div className="bg-primary/20 p-3 rounded-xl group-hover:bg-primary/30 transition-colors">
               <Swords className="h-8 w-8 text-primary" />
             </div>
-            <span className="text-3xl font-bold tracking-tight">OmniPrep</span>
+            <span className="text-3xl font-bold tracking-tight">EduQuiz</span>
           </Link>
         </div>
 

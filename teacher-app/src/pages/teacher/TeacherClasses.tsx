@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Pencil, Plus, Users, Copy, Trash2, Mail, Eye, Award, TrendingUp, BookOpen } from 'lucide-react';
+import { Pencil, Plus, Users, Copy, Trash2, Mail, Eye, Award, TrendingUp, BookOpen, Share2, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -83,7 +83,7 @@ export default function TeacherClasses() {
         });
         const enrollmentsData = await enrollmentsResponse.json();
         if (enrollmentsResponse.ok) {
-          counts[cls.id] = enrollmentsData.totalStudents;
+          counts[cls.id] = enrollmentsData.totalStudents ?? enrollmentsData.totalstudents ?? (enrollmentsData.enrollments ? enrollmentsData.enrollments.length : 0);
           students[cls.id] = enrollmentsData.enrollments.map((e: any) => ({
             id: e.studentId,
             displayName: e.studentName,
@@ -158,6 +158,12 @@ export default function TeacherClasses() {
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast.success('Class code copied!');
+  };
+
+  const handleCopyInviteLink = (code: string) => {
+    const inviteUrl = `http://localhost:5173/join/${code}`;
+    navigator.clipboard.writeText(inviteUrl);
+    toast.success('Student Auto-Enroll invite link copied to clipboard!');
   };
 
   const viewStudents = (cls: Class) => {
@@ -261,10 +267,27 @@ export default function TeacherClasses() {
                     <Badge variant="outline">{enrollmentCounts[cls.id] || 0} students</Badge>
                   </div>
                 </div>
-                <div className="space-y-2 mt-4 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Class Code:</span>
-                    <span className="font-mono font-medium">{cls.classCode}</span>
+                <div className="space-y-3 mt-4 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground font-medium">Class Code:</span>
+                    <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{cls.classCode}</span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700 flex items-center gap-1">
+                        <Link2 className="h-3.5 w-3.5 text-primary" /> Auto-Enroll Link:
+                      </span>
+                      <button 
+                        onClick={() => handleCopyInviteLink(cls.classCode)}
+                        className="text-primary hover:underline font-medium text-[11px] flex items-center gap-0.5"
+                      >
+                        <Share2 className="h-3 w-3" /> Copy
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground font-mono truncate select-all bg-white p-1 rounded border">
+                      http://localhost:5173/join/{cls.classCode}
+                    </p>
                   </div>
                 </div>
                 
@@ -272,7 +295,10 @@ export default function TeacherClasses() {
                   <Button variant="outline" size="sm" onClick={() => viewStudents(cls)} className="flex-1">
                     <Eye className="h-4 w-4 mr-1" /> View Students
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleCopyCode(cls.classCode)}>
+                  <Button variant="outline" size="sm" onClick={() => handleCopyInviteLink(cls.classCode)} title="Copy Student Invite Link">
+                    <Share2 className="h-4 w-4 text-primary" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleCopyCode(cls.classCode)} title="Copy Code">
                     <Copy className="h-4 w-4" />
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => openEditDialog(cls)}>

@@ -239,7 +239,7 @@ const QuizTaking = () => {
   const currentQuestion = questions[currentIndex];
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col bg-background relative overflow-hidden">
+    <div className="min-h-[calc(100vh-120px)] flex flex-col bg-background rounded-xl border border-white/10 relative overflow-hidden">
       {/* Top Bar: Progress and Timer */}
       <div className="flex-shrink-0 h-16 border-b border-white/10 bg-card/30 backdrop-blur-md px-6 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">

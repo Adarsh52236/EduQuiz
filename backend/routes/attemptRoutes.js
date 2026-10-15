@@ -142,11 +142,19 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Check if student already has an active attempt for this quiz
     const [activeAttemptRows] = await db.pool.query(
-      'SELECT id FROM quiz_attempts WHERE quizId = ? AND studentId = ? AND isCompleted = FALSE',
+      'SELECT id, startedAt FROM quiz_attempts WHERE quizId = ? AND studentId = ? AND isCompleted = FALSE',
       [quizId, studentId]
     );
     if (activeAttemptRows.length > 0) {
-      return res.status(409).json({ message: 'You already have an active attempt for this quiz' });
+      console.log(`[AttemptRoutes] Resuming active attempt: ${activeAttemptRows[0].id}`);
+      return res.status(200).json({ 
+        id: activeAttemptRows[0].id, 
+        quizId, 
+        studentId, 
+        startedAt: activeAttemptRows[0].startedAt, 
+        isCompleted: false,
+        resumed: true 
+      });
     }
 
     await db.pool.query(
@@ -289,15 +297,44 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
       ]);
     }
 
-    // Insert answers
-    if (quizAnswersToInsert.length > 0) {
+    // Insert answers reliably
+    for (const ansItem of quizAnswersToInsert) {
       await connection.query(
-        'INSERT INTO quiz_answers (id, attemptId, questionId, answer, isCorrect, pointsEarned) VALUES ?',
-        [quizAnswersToInsert]
+        'INSERT INTO quiz_answers (id, attemptId, questionId, answer, isCorrect, pointsEarned) VALUES (?, ?, ?, ?, ?, ?)',
+        ansItem
       );
     }
 
-    // Update attempt
+    // Dynamic ELO and XP Calculation
+    const percentage = totalPossiblePoints > 0 ? Math.round((score / totalPossiblePoints) * 100) : 0;
+    let eloDelta = 0;
+    let xpEarned = 25; // Base participation XP
+    if (percentage >= 90) {
+      eloDelta = 25;
+      xpEarned += 100;
+    } else if (percentage >= 75) {
+      eloDelta = 15;
+      xpEarned += 60;
+    } else if (percentage >= 60) {
+      eloDelta = 5;
+      xpEarned += 30;
+    } else if (percentage >= 40) {
+      eloDelta = -5;
+      xpEarned += 15;
+    } else {
+      eloDelta = -15;
+      xpEarned += 5;
+    }
+
+    const [userRows] = await connection.query('SELECT eloRating, globalXp FROM users WHERE id = ?', [studentId]);
+    const currentElo = userRows[0]?.eloRating || 1200;
+    const currentXp = userRows[0]?.globalXp || 0;
+    const newElo = Math.max(500, currentElo + eloDelta);
+    const newXp = currentXp + xpEarned;
+
+    await connection.query('UPDATE users SET eloRating = ?, globalXp = ? WHERE id = ?', [newElo, newXp, studentId]);
+
+    // Update attempt record
     await connection.query(
       'UPDATE quiz_attempts SET submittedAt = ?, score = ?, totalPoints = ?, timeTaken = ?, isCompleted = TRUE WHERE id = ?',
       [submittedAt, score, totalPossiblePoints, timeTaken, attemptId]
@@ -312,13 +349,13 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
          WHERE qa.studentId = ? AND q.classId = ? AND qa.isCompleted = TRUE`,
         [studentId, classId]
       );
-      const studentTotalScore = studentTotalScoreRows[0].totalScore || 0;
+      const studentTotalScore = studentTotalScoreRows[0]?.totalScore || 0;
 
       await connection.query(
         `INSERT INTO leaderboards (id, classId, studentId, totalScore)
          VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE totalScore = ?`,
-        [uuidv4(), classId, studentId, studentTotalScore, studentTotalScore]
+         ON CONFLICT (classId, studentId) DO UPDATE SET totalScore = EXCLUDED.totalScore, updatedAt = CURRENT_TIMESTAMP`,
+        [uuidv4(), classId, studentId, studentTotalScore]
       );
 
       // Recalculate ranks
@@ -353,7 +390,6 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
       
       const io = req.app.get('io');
       if (io) {
-        // Broadcast to all connected users for now since class rooms aren't set up
         io.emit('leaderboardUpdate', leaderboardData);
         console.log(`[AttemptRoutes] Broadcasted leaderboard update for class ${classId}`);
       }
@@ -388,12 +424,12 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
 
         if (winnerId) {
           await connection.query(
-            'UPDATE challenges SET status = "completed", winnerId = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE challenges SET status = \'completed\', winnerId = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [winnerId, challenge.id]
           );
         } else {
           await connection.query(
-            'UPDATE challenges SET status = "completed", updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE challenges SET status = \'completed\', updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
             [challenge.id]
           );
         }
@@ -402,7 +438,18 @@ router.post('/:attemptId/submit', authenticateToken, async (req, res) => {
 
     await connection.commit();
     console.log(`[AttemptRoutes] Quiz submission completed successfully for attempt ${attemptId}`);
-    res.status(200).json({ message: 'Quiz submitted successfully', attemptId, score, totalPossiblePoints, timeTaken });
+    res.status(200).json({ 
+      message: 'Quiz submitted successfully', 
+      attemptId, 
+      score, 
+      totalPossiblePoints, 
+      percentage,
+      timeTaken,
+      eloDelta,
+      newElo,
+      xpEarned,
+      newXp
+    });
 
   } catch (error) {
     console.error(`[AttemptRoutes] Error submitting quiz attempt ${attemptId}:`, error);

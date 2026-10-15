@@ -13,6 +13,7 @@ import LandingPage from './pages/LandingPage';
 import StudentAuth from './pages/auth/StudentAuth';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
+import AutoEnroll from './pages/student/AutoEnroll';
 
 // Student Pages
 import StudentDashboard from "./pages/student/StudentDashboard";
@@ -27,7 +28,21 @@ import StudentEnroll from './pages/student/StudentEnroll'; // Import StudentEnro
 import StudentLeaderboard from './pages/student/StudentLeaderboard'; // Import StudentLeaderboard
 import { StudentAnalytics } from './pages/student/StudentAnalytics'; // Import StudentAnalytics
 import Arena from './pages/student/Arena/Arena';
+import PracticeQuestionsPage from './pages/student/PracticeQuestionsPage';
 
+
+import { useEffect } from 'react';
+
+function ExternalRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.href = to;
+  }, [to]);
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+      <p className="text-muted-foreground animate-pulse">Redirecting to Teacher Portal...</p>
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -41,6 +56,12 @@ function App() {
           <Route path="/auth/student/sign-up" element={<StudentAuth />} />
           <Route path="/auth/student/forgot-password" element={<ForgotPassword />} />
           <Route path="/auth/student/reset-password" element={<ResetPassword />} />
+          <Route path="/join/:classCode" element={<AutoEnroll />} />
+          <Route path="/enroll/:classCode" element={<AutoEnroll />} />
+
+          {/* Cross-App Bridge: Redirect Teacher URLs to Teacher App (Port 5174) */}
+          <Route path="/auth/teacher/*" element={<ExternalRedirect to="http://localhost:5174/auth/teacher/sign-in" />} />
+          <Route path="/teacher/*" element={<ExternalRedirect to="http://localhost:5174/teacher/dashboard" />} />
 
           {/* Student Routes */}
           <Route
@@ -61,6 +82,8 @@ function App() {
                     <Route path="leaderboard" element={<StudentLeaderboard />} /> {/* New route for leaderboard */}
                     <Route path="analytics" element={<StudentAnalytics />} /> {/* New route for analytics */}
                     <Route path="arena" element={<Arena />} />
+                    <Route path="questions" element={<PracticeQuestionsPage />} />
+                    <Route path="practice" element={<PracticeQuestionsPage />} />
                     <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
                   </Routes>
                 </StudentLayout>

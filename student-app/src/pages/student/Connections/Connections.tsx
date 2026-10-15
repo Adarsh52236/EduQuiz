@@ -24,7 +24,7 @@ interface StudentConnection {
   studentId: string;
   connectedStudentId: string;
   status: 'pending' | 'accepted' | 'rejected';
-  createdAt: string;
+  peerId?: string;
   connectedStudentName?: string; // Added for display
   connectedStudentEmail?: string; // Added for display
 }
@@ -256,29 +256,33 @@ const Connections = () => {
             <CardDescription>Review and respond to connection requests from other students</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {pendingRequests.map(request => (
-              <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-3">
+            {pendingRequests.map(request => {
+              const requesterName = request.connectedStudentName || (request as any).connectedstudentname || 'Unknown Student';
+              const requesterEmail = request.connectedStudentEmail || (request as any).connectedstudentemail || 'No email';
+              return (
+                <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                      {(request.connectedStudentName || 'U').charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">{request.connectedStudentName || 'Unknown Student'}</p>
-                    <p className="text-sm text-muted-foreground">{request.connectedStudentEmail || 'No email'}</p>
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                        {requesterName.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{requesterName}</p>
+                      <p className="text-sm text-muted-foreground">{requesterEmail}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleUpdateConnectionRequest(request.id, 'accepted')} className="bg-green-600 hover:bg-green-700">
+                      <Check className="h-4 w-4 mr-1" /> Accept
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleUpdateConnectionRequest(request.id, 'rejected')}>
+                      <X className="h-4 w-4 mr-1" /> Reject
+                    </Button>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => handleUpdateConnectionRequest(request.id, 'accepted')} className="bg-green-600 hover:bg-green-700">
-                    <Check className="h-4 w-4 mr-1" /> Accept
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleUpdateConnectionRequest(request.id, 'rejected')}>
-                    <X className="h-4 w-4 mr-1" /> Reject
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
@@ -301,41 +305,46 @@ const Connections = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {acceptedConnections.map(conn => (
-                <Card key={conn.id} className="text-center hover:shadow-md transition-shadow border-2 hover:border-primary/50">
-                  <CardContent className="p-6">
-                    <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary/20">
-                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xl">
-                        {(conn.connectedStudentName || 'U').charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <h3 className="text-lg font-semibold mb-1">{conn.connectedStudentName || 'Unknown Student'}</h3>
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-1">{conn.connectedStudentEmail || 'No email'}</p>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1"
-                        onClick={() => navigate(`/student/profile/${conn.connectedStudentId}`)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        className="flex-1"
-                        onClick={() => {
-                          setSelectedFriendForChallenge({ id: conn.connectedStudentId, displayName: conn.connectedStudentName || 'Unknown Student', email: conn.connectedStudentEmail || '', role: 'student' });
-                          setShowChallengeDialog(true);
-                        }}
-                      >
-                        <Zap className="h-4 w-4 mr-1" />
-                        Challenge
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {acceptedConnections.map(conn => {
+                const friendId = conn.peerId || (conn.studentId === user?.id ? conn.connectedStudentId : conn.studentId);
+                const friendName = conn.connectedStudentName || (conn as any).connectedstudentname || 'Unknown Student';
+                const friendEmail = conn.connectedStudentEmail || (conn as any).connectedstudentemail || 'No email';
+                return (
+                  <Card key={conn.id} className="text-center hover:shadow-md transition-shadow border-2 hover:border-primary/50">
+                    <CardContent className="p-6">
+                      <Avatar className="w-20 h-20 mx-auto mb-4 border-2 border-primary/20">
+                        <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xl">
+                          {friendName.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <h3 className="text-lg font-semibold mb-1">{friendName}</h3>
+                      <p className="text-sm text-muted-foreground mb-4 line-clamp-1">{friendEmail}</p>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => navigate(`/student/profile/${friendId}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => {
+                            setSelectedFriendForChallenge({ id: friendId, displayName: friendName, email: friendEmail, role: 'student' });
+                            setShowChallengeDialog(true);
+                          }}
+                        >
+                          <Zap className="h-4 w-4 mr-1" />
+                          Challenge
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -420,20 +429,23 @@ const Connections = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="quiz-select">Select Quiz</Label>
-              <Select value={selectedQuizForChallenge} onValueChange={setSelectedQuizForChallenge}>
-                <SelectTrigger id="quiz-select">
-                  <SelectValue placeholder="Choose a quiz to challenge with" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableQuizzes.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No available quizzes</div>
-                  ) : (
-                    availableQuizzes.map(quiz => (
+              {availableQuizzes.length === 0 ? (
+                <div className="p-4 text-center border border-dashed border-amber-500/20 bg-amber-500/5 rounded-lg">
+                  <p className="text-sm font-semibold text-amber-400">No quizzes available until now.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Quizzes will appear here once your teacher publishes them.</p>
+                </div>
+              ) : (
+                <Select value={selectedQuizForChallenge} onValueChange={setSelectedQuizForChallenge}>
+                  <SelectTrigger id="quiz-select">
+                    <SelectValue placeholder="Choose a quiz to challenge with" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableQuizzes.map(quiz => (
                       <SelectItem key={quiz.id} value={quiz.id}>{quiz.title}</SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <Button 
               onClick={handleSendChallenge} 

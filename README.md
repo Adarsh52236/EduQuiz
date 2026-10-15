@@ -103,63 +103,76 @@ EduQuiz/
    ```
 
 2. **Install all dependencies**
+   From the project root:
    ```bash
    npm run install:all
    ```
    Or install individually:
    ```bash
-   npm run install:client
-   npm run install:server
+   npm run install:backend
+   npm run install:student
+   npm run install:teacher
    ```
 
 3. **Configure environment variables**
    
-   **Backend** — Copy `backend/.env.example` to `backend/.env`:
+   **Backend** — Ensure `backend/.env` is configured:
    ```bash
    cp backend/.env.example backend/.env
    ```
    Required: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `JWT_SECRET`, `FRONTEND_URL`
 
-   **Frontend** — Create `client/.env`:
+   **Student App** — In `student-app/.env`:
+   ```env
+   VITE_API_URL=http://localhost:3001
+   ```
+
+   **Teacher App** — In `teacher-app/.env`:
    ```env
    VITE_API_URL=http://localhost:3001
    ```
 
 4. **Start Backend Server**
+   From the project root:
    ```bash
    npm run dev:server
    ```
+   *(Or navigate into `backend` and run `npm start` or `npm run dev`)*
    Backend runs on `http://localhost:3001`
 
-5. **Start Frontend Development Server**
-   ```bash
-   npm run dev:client
-   ```
-   Frontend runs on `http://localhost:5173`
+5. **Start Frontend Applications**
+   Open separate terminal windows and run from the project root:
+
+   - **Student Portal** (runs on `http://localhost:5173`):
+     ```bash
+     npm run dev:student
+     ```
+     *(Or inside `student-app/`: `npm run dev`)*
+
+   - **Teacher Portal** (runs on `http://localhost:5174`):
+     ```bash
+     npm run dev:teacher
+     ```
+     *(Or inside `teacher-app/`: `npm run dev`)*
 
 ## Available Scripts
 
 ### From Project Root
 | Command | Description |
 |---------|-------------|
-| `npm run dev:client` | Start frontend dev server |
-| `npm run dev:server` | Start backend server |
-| `npm run build:client` | Build frontend for production |
-| `npm run install:all` | Install all dependencies |
-| `npm run lint` | Run ESLint on frontend |
+| `npm run dev:server` / `dev:backend` | Start Express backend server (`:3001`) |
+| `npm run dev:student` | Start Student Vite frontend (`:5173`) |
+| `npm run dev:teacher` | Start Teacher Vite frontend (`:5174`) |
+| `npm run install:all` | Install all dependencies across all apps |
+| `npm run build:student` | Build Student app for production |
+| `npm run build:teacher` | Build Teacher app for production |
 
-### From `client/`
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Vite dev server |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build |
-| `npm run lint` | Run ESLint |
-
-### From `backend/`
-| Command | Description |
-|---------|-------------|
-| `npm start` | Start production server |
+### From Subdirectories
+| Directory | Command | Description |
+|-----------|---------|-------------|
+| `backend/` | `npm start` or `npm run dev` | Start backend server |
+| `student-app/` | `npm run dev` | Start Student dev server |
+| `teacher-app/` | `npm run dev` | Start Teacher dev server |
 
 ## Database Configuration
 

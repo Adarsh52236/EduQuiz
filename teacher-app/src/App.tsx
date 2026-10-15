@@ -19,6 +19,20 @@ import TeacherQuizzes from "./pages/teacher/TeacherQuizzes";
 import CreateQuiz from "./pages/teacher/CreateQuiz";
 import QuizEditor from "./pages/teacher/QuizEditor/QuizEditor";
 import QuizAnalytics from "./pages/teacher/QuizAnalytics";
+import TeacherNetwork from "./pages/teacher/TeacherNetwork";
+
+import { useEffect } from 'react';
+
+function ExternalRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.href = to;
+  }, [to]);
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+      <p className="text-muted-foreground animate-pulse">Redirecting to Student Portal...</p>
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -30,6 +44,10 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth/teacher/sign-in" element={<TeacherAuth />} />
           <Route path="/auth/teacher/sign-up" element={<TeacherAuth />} />
+
+          {/* Cross-App Bridge: Redirect Student URLs to Student App (Port 5173) */}
+          <Route path="/auth/student/*" element={<ExternalRedirect to="http://localhost:5173/auth/student/sign-in" />} />
+          <Route path="/student/*" element={<ExternalRedirect to="http://localhost:5173/student/dashboard" />} />
 
           {/* Teacher Routes */}
           <Route
@@ -44,6 +62,7 @@ function App() {
                     <Route path="quizzes/:quizId" element={<QuizEditor />} />
                     <Route path="quizzes/:quizId/analytics" element={<QuizAnalytics />} />
                     <Route path="classes" element={<TeacherClasses />} />
+                    <Route path="network" element={<TeacherNetwork />} />
                     <Route path="analytics" element={<TeacherAnalytics />} />
                     <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />
                   </Routes>

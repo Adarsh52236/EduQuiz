@@ -84,8 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Invalid email format');
       }
       
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+      if (!passwordRegex.test(password)) {
+        throw new Error('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.');
       }
       
       if (displayName.trim().length < 2) {

@@ -16,18 +16,18 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const [connections] = await db.pool.query(
       `SELECT 
-         sc.id, sc.studentId, sc.status, sc.createdAt,
-         u.id as connectedStudentId, u.displayName as connectedStudentName, u.email as connectedStudentEmail
+         sc.id, sc.studentId, sc.connectedStudentId, sc.status, sc.createdAt,
+         u.id as peerId, u.displayName as connectedStudentName, u.email as connectedStudentEmail, u.avatar as connectedStudentAvatar
        FROM student_connections sc
        JOIN users u ON sc.connectedStudentId = u.id
        WHERE sc.studentId = ?
-       UNION
+       UNION ALL
        SELECT 
-         sc.id, sc.studentId, sc.status, sc.createdAt,
-         u.id as connectedStudentId, u.displayName as connectedStudentName, u.email as connectedStudentEmail
+         sc.id, sc.studentId, sc.connectedStudentId, sc.status, sc.createdAt,
+         u.id as peerId, u.displayName as connectedStudentName, u.email as connectedStudentEmail, u.avatar as connectedStudentAvatar
        FROM student_connections sc
        JOIN users u ON sc.studentId = u.id
-       WHERE sc.connectedStudentId = ? AND sc.status = 'accepted'`, // Only show accepted connections where current user is the connectedStudentId
+       WHERE sc.connectedStudentId = ?`,
       [studentId, studentId]
     );
     console.log(`[ConnectionRoutes] Found ${connections.length} connections for user ${studentId}`);
@@ -59,7 +59,7 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     // Check if connectedStudentId exists and is a student
     const [userRows] = await db.pool.query(
-      'SELECT id FROM users WHERE id = ? AND role = "student"',
+      "SELECT id FROM users WHERE id = ? AND role = 'student'",
       [connectedStudentId]
     );
     if (userRows.length === 0) {
@@ -86,7 +86,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Insert new pending connection request
     await db.pool.query(
-      'INSERT INTO student_connections (id, studentId, connectedStudentId, status) VALUES (?, ?, ?, "pending")',
+      "INSERT INTO student_connections (id, studentId, connectedStudentId, status) VALUES (?, ?, ?, 'pending')",
       [id, studentId, connectedStudentId]
     );
 
@@ -221,14 +221,14 @@ router.post('/challenge', authenticateToken, async (req, res) => {
   try {
     // 1. Verify opponentId exists and is a student
     const [opponentRows] = await db.pool.query(
-      'SELECT id FROM users WHERE id = ? AND role = "student"',
+      "SELECT id FROM users WHERE id = ? AND role = 'student'",
       [opponentId]
     );
     if (opponentRows.length === 0) {
       return res.status(404).json({ message: 'Opponent not found or is not a student' });
     }
 
-    // 2. Verify they are connected (status 'accepted')
+    // 2. Verify they are connected (status 'accepted') - Friends Only Rule
     const [connectionRows] = await db.pool.query(
       `SELECT id FROM student_connections 
        WHERE ((studentId = ? AND connectedStudentId = ?) OR (studentId = ? AND connectedStudentId = ?)) 
@@ -236,7 +236,7 @@ router.post('/challenge', authenticateToken, async (req, res) => {
       [challengerId, opponentId, opponentId, challengerId]
     );
     if (connectionRows.length === 0) {
-      return res.status(403).json({ message: 'You are not connected with this student' });
+      return res.status(403).json({ message: 'You can only challenge students from your friend list! Connect first.' });
     }
 
     // 3. Verify quiz exists and is published
@@ -261,7 +261,7 @@ router.post('/challenge', authenticateToken, async (req, res) => {
 
     // 5. Insert new pending challenge
     await db.pool.query(
-      'INSERT INTO challenges (id, challengerId, opponentId, quizId, status) VALUES (?, ?, ?, ?, "pending")',
+      "INSERT INTO challenges (id, challengerId, opponentId, quizId, status) VALUES (?, ?, ?, ?, 'pending')",
       [id, challengerId, opponentId, quizId]
     );
 

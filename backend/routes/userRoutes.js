@@ -7,7 +7,7 @@ const { authenticateToken } = require('./authRoutes'); // Import authenticateTok
 router.get('/', authenticateToken, async (req, res) => {
   try {
     console.log('[UserRoutes] Fetching users, role filter:', req.query.role);
-    let query = 'SELECT id, email, displayName, role, avatar, bio, department, grade, phone, address, dateOfBirth, createdAt, updatedAt FROM users';
+    let query = 'SELECT id, email, displayName, role, avatar, bio, department, grade, phone, address, dateOfBirth, eloRating, globalXp, createdAt, updatedAt FROM users';
     const queryParams = [];
 
     if (req.query.role) {
@@ -32,7 +32,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const userRole = req.user.role;
 
     const [users] = await pool.query(
-      'SELECT id, email, displayName, role, avatar, bio, department, grade, phone, address, dateOfBirth, createdAt, updatedAt FROM users WHERE id = ?',
+      'SELECT id, email, displayName, role, avatar, bio, department, grade, phone, address, dateOfBirth, eloRating, globalXp, createdAt, updatedAt FROM users WHERE id = ?',
       [id]
     );
 

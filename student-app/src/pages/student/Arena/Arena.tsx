@@ -202,7 +202,7 @@ const Arena = () => {
   // Renders
   if (gameState === 'IDLE') {
     return (
-      <div className="h-[calc(100vh-64px)] flex items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-background">
+      <div className="min-h-[calc(100vh-120px)] flex items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-background rounded-xl border border-white/10 overflow-hidden">
         <div className="max-w-md w-full p-8 rounded-2xl bg-black/60 border border-primary/30 backdrop-blur-md text-center shadow-[0_0_50px_rgba(139,92,246,0.15)] animate-fade-in">
           <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(139,92,246,0.3)]">
             <Swords className="h-10 w-10 text-primary" />
@@ -220,7 +220,7 @@ const Arena = () => {
 
   if (gameState === 'QUEUED') {
     return (
-      <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center bg-background">
+      <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center bg-background rounded-xl border border-white/10 overflow-hidden">
         <div className="relative mb-12">
           <div className="absolute inset-0 bg-primary/20 blur-[100px] rounded-full"></div>
           <Loader2 className="h-24 w-24 text-primary animate-spin relative z-10" />
@@ -236,7 +236,7 @@ const Arena = () => {
 
   if (gameState === 'MATCH_FOUND') {
     return (
-      <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center bg-background animate-fade-in">
+      <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center bg-background rounded-xl border border-white/10 overflow-hidden animate-fade-in">
         <h1 className="text-5xl font-black uppercase tracking-widest text-destructive mb-16 animate-pulse shadow-destructive/50 drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">
           MATCH FOUND
         </h1>
@@ -264,7 +264,7 @@ const Arena = () => {
     const currentQ = questions[currentIndex];
     
     return (
-      <div className="h-[calc(100vh-64px)] flex flex-col bg-background relative overflow-hidden">
+      <div className="min-h-[calc(100vh-120px)] flex flex-col bg-background rounded-xl border border-white/10 relative overflow-hidden">
         {/* Arena Top Bar */}
         <div className="h-20 border-b border-white/10 bg-black/40 backdrop-blur-md px-8 flex items-center justify-between z-10">
           

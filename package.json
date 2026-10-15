@@ -4,14 +4,17 @@
   "private": true,
   "description": "A full-stack quiz application for education with teacher and student dashboards",
   "scripts": {
-    "dev:client": "cd client && npm run dev",
     "dev:server": "cd backend && npm start",
-    "build:client": "cd client && npm run build",
-    "install:client": "cd client && npm install",
+    "dev:backend": "cd backend && npm start",
+    "dev:student": "cd student-app && npm run dev",
+    "dev:teacher": "cd teacher-app && npm run dev",
+    "build:student": "cd student-app && npm run build",
+    "build:teacher": "cd teacher-app && npm run build",
+    "install:student": "cd student-app && npm install",
+    "install:teacher": "cd teacher-app && npm install",
     "install:server": "cd backend && npm install",
-    "install:all": "npm run install:client && npm run install:server",
-    "lint": "cd client && npm run lint",
-    "preview": "cd client && npm run preview"
+    "install:backend": "cd backend && npm install",
+    "install:all": "npm run install:server && npm run install:student && npm run install:teacher"
   },
   "keywords": ["quiz", "education", "react", "express"],
   "license": "ISC"

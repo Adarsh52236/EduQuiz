@@ -65,8 +65,11 @@ router.post('/signup', async (req, res) => {
   }
 
   try {
-    // Check if user already exists
-    const [existingUsers] = await db.pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    // Check if user already exists (case-insensitive)
+    const [existingUsers] = await db.pool.query(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER(?)',
+      [email.trim()]
+    );
     if (existingUsers.length > 0) {
       return res.status(409).json({ message: 'User with that email already exists' });
     }
@@ -87,7 +90,7 @@ router.post('/signup', async (req, res) => {
     });
   } catch (error) {
     console.error('Error during signup:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
       return res.status(409).json({ message: 'User with that email already exists' });
     }
     res.status(500).json({ message: 'Server error during signup' });

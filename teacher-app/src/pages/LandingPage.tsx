@@ -7,7 +7,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-primary/10 via-background to-primary/5 py-20 px-4">
+      <section className="relative bg-gradient-to-br from-primary/10 via-background to-primary/5 py-20 px-[max(1cm,1.5rem)]">
         <div className="max-w-6xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 mb-6">
             <GraduationCap className="h-12 w-12 text-primary" />
@@ -22,17 +22,17 @@ export default function LandingPage() {
                 I'm a Teacher
               </Button>
             </Link>
-            <Link to="/auth/student/sign-in">
+            <a href="http://localhost:5173/auth/student/sign-in">
               <Button size="lg" variant="outline" className="text-lg px-8">
                 I'm a Student
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-[max(1cm,1.5rem)]">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Everything You Need for Effective Assessment</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -100,7 +100,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="bg-primary/5 py-20 px-4">
+      <section className="bg-primary/5 py-20 px-[max(1cm,1.5rem)]">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-6">Ready to Transform Your Classroom?</h2>
           <p className="text-xl text-muted-foreground mb-8">
@@ -112,17 +112,17 @@ export default function LandingPage() {
                 Get Started as Teacher
               </Button>
             </Link>
-            <Link to="/auth/student/sign-in">
+            <a href="http://localhost:5173/auth/student/sign-in">
               <Button size="lg" variant="outline" className="text-lg px-8">
                 Join as Student
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-8 px-4">
+      <footer className="border-t py-8 px-[max(1cm,1.5rem)]">
         <div className="max-w-6xl mx-auto text-center text-muted-foreground">
           <p>&copy; 2025 EduQuiz. All rights reserved.</p>
         </div>

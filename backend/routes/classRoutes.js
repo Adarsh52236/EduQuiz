@@ -154,7 +154,7 @@ router.get('/:classId/enrollments', authenticateToken, async (req, res) => {
       'SELECT COUNT(*) as totalStudents FROM class_enrollments WHERE classId = ?',
       [classId]
     );
-    const totalStudents = countResult[0].totalStudents;
+    const totalStudents = parseInt(countResult[0]?.totalStudents ?? countResult[0]?.totalstudents ?? enrollments.length ?? 0, 10);
 
     res.status(200).json({ enrollments, totalStudents });
   } catch (error) {

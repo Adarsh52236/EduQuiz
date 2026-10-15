@@ -1,131 +1,135 @@
 import { Button } from '@/components/ui/button';
-import { Swords, Code, Trophy, Activity, ArrowRight, Zap, Target } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { GraduationCap, Users, BarChart3, Award, BookOpen, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 
 export default function LandingPage() {
-  const [tickerText, setTickerText] = useState("1,204 students in Arena right now");
-  
-  useEffect(() => {
-    // Fake live ticker for the landing page
-    const tickers = [
-      "1,204 students in Arena right now",
-      "Global Elo leaderboard updated 2m ago",
-      "New Daily Challenge: Advanced Calculus",
-      "User 'MathWizard99' just hit a 30-day streak!"
-    ];
-    let i = 0;
-    const interval = setInterval(() => {
-      i = (i + 1) % tickers.length;
-      setTickerText(tickers[i]);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+  const teacherAppUrl = 'http://localhost:5174';
 
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30">
-      
-      {/* Navbar */}
-      <nav className="border-b border-white/5 bg-background/50 backdrop-blur-md fixed top-0 w-full z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-primary/20 p-2 rounded-lg">
-              <Swords className="h-5 w-5 text-primary" />
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Hero Section */}
+      <section className="relative bg-gradient-to-br from-primary/10 via-background to-primary/5 py-20 px-[max(1cm,1.5rem)]">
+        <div className="max-w-6xl mx-auto text-center">
+          <div className="inline-flex items-center gap-3 mb-6">
+            <div className="bg-primary/20 p-3 rounded-2xl">
+              <GraduationCap className="h-12 w-12 text-primary" />
             </div>
-            <span className="text-xl font-bold tracking-tight">OmniPrep</span>
+            <h1 className="text-5xl font-bold tracking-tight">EduQuiz</h1>
           </div>
-          <div className="flex items-center gap-4">
-            {/* The Teacher App runs on a different port/subdomain */}
-            <a href="http://localhost:5174/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Teacher Console
+          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+            Empower teachers to create engaging classroom quizzes and analyze student performance with detailed insights and analytics.
+          </p>
+          <div className="flex flex-wrap gap-4 justify-center">
+            <a href={`${teacherAppUrl}/auth/teacher/sign-in`}>
+              <Button size="lg" className="text-lg px-8 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-md">
+                I'm a Teacher
+              </Button>
             </a>
             <Link to="/auth/student/sign-in">
-              <Button variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-0">
-                Sign In
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-6">
-        {/* Ambient Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 blur-[120px] rounded-full pointer-events-none" />
-        
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          
-          {/* Live Ticker */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-sm font-medium mb-8 animate-fade-in shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-            <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            {tickerText}
-          </div>
-
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-8 leading-tight">
-            Master the Curriculum.<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-cyan-400">
-              Dominate the Arena.
-            </span>
-          </h1>
-          
-          <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">
-            The ultimate platform where classroom assignments meet high-stakes competitive learning. Practice like it's LeetCode. Compete like it's E-Sports.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link to="/auth/student/sign-up">
-              <Button size="lg" className="h-14 px-8 text-lg bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_30px_rgba(139,92,246,0.4)] group">
-                Enter the Arena 
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              <Button size="lg" variant="outline" className="text-lg px-8 border-input hover:bg-accent font-medium">
+                I'm a Student
               </Button>
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Features Grid */}
-      <section className="py-24 px-6 border-t border-white/5 bg-black/20">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors group">
-              <div className="h-12 w-12 bg-primary/20 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Target className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3">Targeted Practice</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Filter questions by topic and difficulty. Track your streak, earn Global XP, and receive instant AI feedback on your short answers.
-              </p>
-            </div>
+      {/* Features Section */}
+      <section className="py-20 px-[max(1cm,1.5rem)]">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-12">Everything You Need for Effective Assessment</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <BookOpen className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Quiz Creation</CardTitle>
+                <CardDescription>
+                  Create multiple-choice, true/false, and short-answer questions with custom scoring and time limits.
+                </CardDescription>
+              </CardHeader>
+            </Card>
 
-            {/* Feature 2 */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors group">
-              <div className="h-12 w-12 bg-cyan-500/20 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Swords className="h-6 w-6 text-cyan-400" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3">Live 1v1 Battles</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Queue up against students worldwide. Climb the Elo ranking system in real-time, high-pressure knowledge showdowns.
-              </p>
-            </div>
+            <Card>
+              <CardHeader>
+                <Users className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Class Management</CardTitle>
+                <CardDescription>
+                  Organize students into classes, share class codes, and manage enrollments effortlessly.
+                </CardDescription>
+              </CardHeader>
+            </Card>
 
-            {/* Feature 3 */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors group">
-              <div className="h-12 w-12 bg-green-500/20 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Activity className="h-6 w-6 text-green-400" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3">Classroom DNA</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Seamlessly complete your teacher's mandatory assignments inside the same engaging, distraction-free environment.
-              </p>
-            </div>
+            <Card>
+              <CardHeader>
+                <BarChart3 className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Detailed Analytics</CardTitle>
+                <CardDescription>
+                  Visualize student performance with interactive charts, identify strengths and weaknesses.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <Award className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Grade Cards</CardTitle>
+                <CardDescription>
+                  Automatically generate professional PDF grade cards with performance metrics and rankings.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <Users className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Student Connections</CardTitle>
+                <CardDescription>
+                  Students can connect with classmates, view profiles, and collaborate on learning.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <TrendingUp className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Real-time Tracking</CardTitle>
+                <CardDescription>
+                  Monitor quiz attempts in real-time and get instant notifications about student progress.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="bg-primary/5 py-20 px-[max(1cm,1.5rem)]">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl font-bold mb-6">Ready to Transform Your Classroom?</h2>
+          <p className="text-xl text-muted-foreground mb-8">
+            Join thousands of educators using EduQuiz to make assessment easier and more effective.
+          </p>
+          <div className="flex flex-wrap gap-4 justify-center">
+            <a href={`${teacherAppUrl}/auth/teacher/sign-in`}>
+              <Button size="lg" className="text-lg px-8 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-md">
+                Get Started as Teacher
+              </Button>
+            </a>
+            <Link to="/auth/student/sign-in">
+              <Button size="lg" variant="outline" className="text-lg px-8 border-input hover:bg-accent font-medium">
+                Join as Student
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-12 px-6 text-center text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} OmniPrep. Built for the next generation of learners.</p>
+      <footer className="border-t py-8 px-[max(1cm,1.5rem)]">
+        <div className="max-w-6xl mx-auto text-center text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} EduQuiz. All rights reserved.</p>
+        </div>
       </footer>
     </div>
   );

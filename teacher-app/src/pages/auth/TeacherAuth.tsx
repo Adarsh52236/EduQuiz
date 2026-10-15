@@ -33,7 +33,10 @@ export default function TeacherAuth() {
     
     if (!trimmedName || trimmedName.length < 2) return toast.error('Valid full name required');
     if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) return toast.error('Invalid email address');
-    if (signUpData.password.length < 6) return toast.error('Password must be at least 6 characters');
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    if (!passwordRegex.test(signUpData.password)) {
+      return toast.error('Password must be at least 8 characters with at least one uppercase letter, one lowercase letter, and one number.');
+    }
     if (signUpData.password !== signUpData.confirmPassword) return toast.error('Passwords do not match');
 
     setIsLoading(true);
@@ -84,7 +87,7 @@ export default function TeacherAuth() {
             <div className="bg-primary p-2 rounded-lg">
               <Building2 className="h-6 w-6 text-white" />
             </div>
-            <span className="text-2xl font-bold tracking-tight">OmniPrep <span className="font-light text-slate-400">Enterprise</span></span>
+            <span className="text-2xl font-bold tracking-tight">EduQuiz <span className="font-light text-slate-400">Enterprise</span></span>
           </div>
           
           <h1 className="text-4xl md:text-5xl font-semibold text-white leading-tight mb-6">
@@ -105,7 +108,7 @@ export default function TeacherAuth() {
         </div>
         
         <div className="relative z-10 text-slate-500 text-sm">
-          &copy; {new Date().getFullYear()} OmniPrep Enterprise Solutions. All rights reserved.
+          &copy; {new Date().getFullYear()} EduQuiz Enterprise Solutions. All rights reserved.
         </div>
       </div>
 
@@ -119,7 +122,7 @@ export default function TeacherAuth() {
           <div className="text-center md:text-left">
             <div className="md:hidden flex items-center justify-center gap-2 text-slate-900 mb-8">
               <Building2 className="h-6 w-6 text-primary" />
-              <span className="text-2xl font-bold tracking-tight">OmniPrep <span className="font-light text-slate-500">Enterprise</span></span>
+              <span className="text-2xl font-bold tracking-tight">EduQuiz <span className="font-light text-slate-500">Enterprise</span></span>
             </div>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-900 mb-2">Admin Portal</h2>
             <p className="text-slate-500">Authenticate to access institutional controls.</p>

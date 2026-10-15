@@ -26,11 +26,20 @@ export async function fetchWithAuth(url, options = {}) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'Network error' }));
-    throw new Error(errorData.message || `API call failed: ${response.statusText}`);
+    const error = new Error(errorData.message || `API call failed: ${response.statusText}`);
+    error.response = { data: errorData, status: response.status };
+    throw error;
   }
 
   return response.json();
 }
+
+export const api = {
+  get: (url, options) => fetchWithAuth(url, { method: 'GET', ...options }),
+  post: (url, data, options) => postWithAuth(url, data, options),
+  put: (url, data, options) => putWithAuth(url, data, options),
+  delete: (url, options) => deleteWithAuth(url, options),
+};
 
 /**
  * Makes a POST request with authentication

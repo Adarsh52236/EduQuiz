@@ -123,3 +123,14 @@
     transform: translateY(0);
   }
 }
+
+/* Ensure minimum 1cm margin/padding from left and right across all pages and prevent over-stretching */
+.page-responsive-container {
+  width: 100%;
+  max-width: 80rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: max(1cm, 1.5rem);
+  padding-right: max(1cm, 1.5rem);
+}
+

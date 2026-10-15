@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, HelpCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { Check, X, HelpCircle, Loader2, ArrowLeft, Star } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -39,8 +39,36 @@ const QuizReview = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [reviewData, setReviewData] = useState<QuizReviewData | null>(null);
+  const [votedImpQuestions, setVotedImpQuestions] = useState<Set<string>>(new Set());
+  const [impCounts, setImpCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleToggleImp = async (questionId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/practice/questions/${questionId}/rate-imp`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVotedImpQuestions(prev => {
+          const next = new Set(prev);
+          if (data.hasVotedImp) next.add(questionId);
+          else next.delete(questionId);
+          return next;
+        });
+        setImpCounts(prev => ({
+          ...prev,
+          [questionId]: data.impVotesCount
+        }));
+        toast.success(data.message);
+      }
+    } catch (err) {
+      toast.error('Failed to rate question as IMP');
+    }
+  };
 
   useEffect(() => {
     if (!quizId || !user) return;
@@ -256,14 +284,30 @@ const QuizReview = () => {
         <CardContent>
           {reviewData.questions.map((q, index) => (
             <div key={q.id} className="mb-6 pb-6 border-b last:border-b-0">
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-4 gap-2">
                 <h3 className="text-lg font-semibold flex items-center">
-                  <HelpCircle className="mr-2" />
-                  Question {index + 1}: {q.questionText}
+                  <HelpCircle className="mr-2 h-5 w-5 text-muted-foreground shrink-0" />
+                  <span>Question {index + 1}: {q.questionText}</span>
                 </h3>
-                <Badge variant={q.isCorrect ? 'default' : 'destructive'}>
-                  {q.pointsEarned} / {q.points} pts
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant={votedImpQuestions.has(q.id) ? "default" : "outline"}
+                    className={`h-7 text-xs flex items-center gap-1.5 transition-all ${
+                      votedImpQuestions.has(q.id)
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                        : 'border-white/10 text-slate-400 hover:text-amber-300 hover:border-amber-500/30'
+                    }`}
+                    onClick={() => handleToggleImp(q.id)}
+                  >
+                    <Star className={`h-3.5 w-3.5 ${votedImpQuestions.has(q.id) ? 'fill-amber-400 text-amber-400' : ''}`} />
+                    {votedImpQuestions.has(q.id) ? 'Marked IMP ⭐' : 'Mark as IMP'}
+                    {impCounts[q.id] !== undefined ? ` (${impCounts[q.id]})` : ''}
+                  </Button>
+                  <Badge variant={q.isCorrect ? 'default' : 'destructive'}>
+                    {q.pointsEarned} / {q.points} pts
+                  </Badge>
+                </div>
               </div>
 
               {/* Display options for multiple-choice and true-false */}

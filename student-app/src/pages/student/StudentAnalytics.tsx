@@ -171,7 +171,7 @@ export function StudentAnalytics() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">My Performance Analytics</h1>
         <Badge variant="outline" className="text-sm">

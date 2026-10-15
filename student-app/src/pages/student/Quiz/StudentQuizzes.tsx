@@ -283,12 +283,12 @@ const StudentQuizzes = () => {
                         {quiz.className && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Class</span>
-                            <span className="font-medium">{quiz.className}</span>
+                            <span className="font-medium">{quiz.className || (quiz as any).classname}</span>
                           </div>
                         )}
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Teacher</span>
-                          <span className="font-medium">{quiz.teacherName}</span>
+                          <span className="font-medium">{quiz.teacherName || (quiz as any).teachername || 'Instructor'}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Points</span>

@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LayoutDashboard, BookOpen, Users, BarChart3, LogOut, User, Building2, Search, Settings, HelpCircle } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, BarChart3, LogOut, User, Building2, Search, Settings, HelpCircle, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationBell } from '@/components/NotificationBell';
 
@@ -25,6 +25,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
     { name: 'Curriculum', href: '/teacher/quizzes', icon: BookOpen },
     { name: 'Cohorts', href: '/teacher/classes', icon: Users },
     { name: 'Analytics', href: '/teacher/analytics', icon: BarChart3 },
+    { name: 'Colleague Network', href: '/teacher/network', icon: Trophy },
   ];
 
   const secondaryNav = [
@@ -51,7 +52,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
             <div className="bg-primary p-1.5 rounded-md">
               <Building2 className="h-4 w-4 text-white" />
             </div>
-            <span className="text-[15px] font-semibold text-white tracking-wide">OmniPrep Admin</span>
+            <span className="text-[15px] font-semibold text-white tracking-wide">EduQuiz Admin</span>
           </Link>
         </div>
 
@@ -135,7 +136,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
         {/* Top Header */}
-        <header className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
+        <header className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-[max(1cm,1.5rem)] shrink-0 z-10 shadow-sm">
           <div className="flex items-center gap-4 flex-1">
             <h1 className="text-lg font-semibold text-slate-800 tracking-tight">
               {navigation.find(item => location.pathname.startsWith(item.href))?.name || 'Dashboard'}
@@ -160,7 +161,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Scrollable Content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto px-[max(1cm,1.5rem)] py-6 md:py-8">
           <div className="max-w-7xl mx-auto space-y-6">
             {children}
           </div>

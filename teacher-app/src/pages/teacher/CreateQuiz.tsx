@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, GripVertical, Save, Sparkles, Eye, Settings, PlayCircle } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Save, Sparkles, Eye, Settings, PlayCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -46,6 +46,65 @@ export default function CreateQuiz() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [useAiGrading, setUseAiGrading] = useState(true);
+
+  // Groq AI Quiz Generator state
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiDifficulty, setAiDifficulty] = useState('Medium');
+  const [aiNumQuestions, setAiNumQuestions] = useState('5');
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+
+  const handleGenerateWithAi = async () => {
+    if (!aiTopic.trim()) {
+      return toast.error('Please enter a subject or topic for the quiz');
+    }
+    setIsAiGenerating(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/ai/generate-quiz', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          topic: aiTopic.trim(),
+          difficulty: aiDifficulty,
+          numQuestions: parseInt(aiNumQuestions, 10) || 5
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'AI generation failed');
+      }
+
+      if (data.quiz) {
+        if (data.quiz.title) setQuizTitle(data.quiz.title);
+        if (data.quiz.description) setQuizDescription(data.quiz.description);
+        if (data.quiz.timeLimit) setTimeLimit(data.quiz.timeLimit);
+
+        if (Array.isArray(data.quiz.questions) && data.quiz.questions.length > 0) {
+          const generatedQuestions: QuizQuestion[] = data.quiz.questions.map((q: any, idx: number) => ({
+            id: `ai-${Date.now()}-${idx}`,
+            questionText: q.questionText || '',
+            questionType: 'multiple-choice',
+            points: q.points || 10,
+            options: Array.isArray(q.options) && q.options.length > 0 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
+            correctAnswer: q.correctAnswer || (q.options ? q.options[0] : '')
+          }));
+          setQuestions(generatedQuestions);
+          setActiveQuestionId(generatedQuestions[0].id);
+        }
+        toast.success(`Groq AI generated ${data.quiz.questions?.length || 0} questions on "${aiTopic.trim()}"!`);
+        setShowAiModal(false);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate quiz with AI');
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -181,9 +240,21 @@ export default function CreateQuiz() {
             <Settings className="h-4 w-4 text-slate-500" />
             <span className="font-semibold text-sm text-slate-700">Curriculum Builder</span>
           </div>
-          <Button size="sm" onClick={() => setShowClassDialog(true)} className="h-8 shadow-sm">
-            Deploy Assessment
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAiModal(true)}
+              className="h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 gap-1.5 shadow-sm font-medium"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+              Generate with Groq AI
+            </Button>
+            <Button size="sm" onClick={() => setShowClassDialog(true)} className="h-8 shadow-sm">
+              Deploy Assessment
+            </Button>
+          </div>
         </div>
 
         <ScrollArea className="flex-1 p-6">
@@ -445,6 +516,85 @@ export default function CreateQuiz() {
             <Button variant="outline" onClick={() => setShowClassDialog(false)} className="flex-1">Cancel</Button>
             <Button onClick={handleSaveAndPublish} disabled={!selectedClassId || isSaving} className="flex-1 bg-primary">
               {isSaving ? 'Deploying...' : 'Deploy to Cohort'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Groq AI Quiz Generation Dialog */}
+      <Dialog open={showAiModal} onOpenChange={setShowAiModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-900">
+              <Sparkles className="h-5 w-5 text-indigo-600" />
+              Generate Assessment with Groq AI
+            </DialogTitle>
+            <DialogDescription>
+              Specify a curriculum subject or topic. Groq LLM will formulate rigorous questions with answer keys.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase font-bold text-slate-600 tracking-wider">Subject / Topic</Label>
+              <Input
+                placeholder="e.g. Asymptotic Complexity & Dynamic Programming"
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                className="bg-slate-50"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase font-bold text-slate-600 tracking-wider">Difficulty</Label>
+                <Select value={aiDifficulty} onValueChange={setAiDifficulty}>
+                  <SelectTrigger className="bg-slate-50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Easy">Easy (Foundational)</SelectItem>
+                    <SelectItem value="Medium">Medium (Undergraduate)</SelectItem>
+                    <SelectItem value="Hard">Hard (Advanced / Olympiad)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase font-bold text-slate-600 tracking-wider">Number of Questions</Label>
+                <Select value={aiNumQuestions} onValueChange={setAiNumQuestions}>
+                  <SelectTrigger className="bg-slate-50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3 Questions</SelectItem>
+                    <SelectItem value="5">5 Questions</SelectItem>
+                    <SelectItem value="8">8 Questions</SelectItem>
+                    <SelectItem value="10">10 Questions</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setShowAiModal(false)} className="flex-1" disabled={isAiGenerating}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerateWithAi}
+              disabled={isAiGenerating || !aiTopic.trim()}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+            >
+              {isAiGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating Questions...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Generate Assessment
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
