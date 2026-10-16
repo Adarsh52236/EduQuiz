@@ -118,8 +118,30 @@ router.post('/signin', async (req, res) => {
   }
 
   try {
+    let searchEmail = email.toLowerCase().trim();
+    const emailAliases = {
+      'prof_turing@eduquiz.edu': 'alan.turing@eduquiz.edu',
+      'prof.turing@eduquiz.edu': 'alan.turing@eduquiz.edu',
+      'turing@eduquiz.edu': 'alan.turing@eduquiz.edu',
+      'prof_lovelace@eduquiz.edu': 'ada.lovelace@eduquiz.edu',
+      'prof.lovelace@eduquiz.edu': 'ada.lovelace@eduquiz.edu',
+      'lovelace@eduquiz.edu': 'ada.lovelace@eduquiz.edu',
+      'prof_hopper@eduquiz.edu': 'grace.hopper@eduquiz.edu',
+      'prof.hopper@eduquiz.edu': 'grace.hopper@eduquiz.edu',
+      'hopper@eduquiz.edu': 'grace.hopper@eduquiz.edu',
+      'prof_shannon@eduquiz.edu': 'claude.shannon@eduquiz.edu',
+      'prof.shannon@eduquiz.edu': 'claude.shannon@eduquiz.edu',
+      'shannon@eduquiz.edu': 'claude.shannon@eduquiz.edu',
+      'prof_johnson@eduquiz.edu': 'katherine.johnson@eduquiz.edu',
+      'prof.johnson@eduquiz.edu': 'katherine.johnson@eduquiz.edu',
+      'johnson@eduquiz.edu': 'katherine.johnson@eduquiz.edu'
+    };
+    if (emailAliases[searchEmail]) {
+      searchEmail = emailAliases[searchEmail];
+    }
+
     // Find user by email (case insensitive)
-    const [users] = await db.pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [email.trim()]);
+    const [users] = await db.pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [searchEmail]);
     const user = users[0];
 
     // Log roles for debugging
