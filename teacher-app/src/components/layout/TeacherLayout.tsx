@@ -35,7 +35,7 @@ export function TeacherLayout({ children }: { children: React.ReactNode }) {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/');
+    navigate('/auth/teacher/sign-in');
   };
 
   const getInitials = (name: string | null) => {

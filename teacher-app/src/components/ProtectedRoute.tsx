@@ -22,7 +22,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   }
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/auth/teacher/sign-in" replace />;
   }
 
   if (requiredRole && user.role !== requiredRole) {

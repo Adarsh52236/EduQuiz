@@ -9,7 +9,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { TeacherLayout } from './components/layout/TeacherLayout';
 
 // Pages
-import LandingPage from './pages/LandingPage';
 import TeacherAuth from './pages/auth/TeacherAuth';
 // Teacher Pages
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
@@ -22,6 +21,7 @@ import QuizAnalytics from "./pages/teacher/QuizAnalytics";
 import TeacherNetwork from "./pages/teacher/TeacherNetwork";
 
 import { useEffect } from 'react';
+import { useAuth } from './contexts/AuthContext';
 
 function ExternalRedirect({ to }: { to: string }) {
   useEffect(() => {
@@ -34,14 +34,29 @@ function ExternalRedirect({ to }: { to: string }) {
   );
 }
 
+function TeacherRootRedirect() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      </div>
+    );
+  }
+  if (isAuthenticated && user?.role === 'teacher') {
+    return <Navigate to="/teacher/dashboard" replace />;
+  }
+  return <Navigate to="/auth/teacher/sign-in" replace />;
+}
+
 function App() {
   return (
     <AuthProvider>
       <NotificationProvider>
         <BrowserRouter>
         <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<LandingPage />} />
+          {/* Public Routes - No duplicate landing page on 5174; redirect to sign-in or dashboard */}
+          <Route path="/" element={<TeacherRootRedirect />} />
           <Route path="/auth/teacher/sign-in" element={<TeacherAuth />} />
           <Route path="/auth/teacher/sign-up" element={<TeacherAuth />} />
 
@@ -74,7 +89,7 @@ function App() {
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        <Toaster position="top-right" />
+        <Toaster />
         <SonnerToaster position="top-right" richColors />
       </BrowserRouter>
       </NotificationProvider>

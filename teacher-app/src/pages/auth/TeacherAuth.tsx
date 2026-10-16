@@ -114,16 +114,16 @@ export default function TeacherAuth() {
 
       {/* RIGHT SIDE: Auth Forms */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-8 md:p-12 lg:p-24 bg-white relative">
-        <Button variant="ghost" className="absolute top-8 left-8 text-muted-foreground hidden md:flex" onClick={() => navigate('/')}>
+        <Button variant="ghost" className="absolute top-8 left-8 text-muted-foreground hidden md:flex" onClick={() => window.location.href = 'http://localhost:5173'}>
           <ChevronLeft className="h-4 w-4 mr-2" /> Return to Platform
         </Button>
         
         <div className="w-full max-w-md space-y-8">
           <div className="text-center md:text-left">
-            <div className="md:hidden flex items-center justify-center gap-2 text-slate-900 mb-8">
+            <a href="http://localhost:5173" className="md:hidden flex items-center justify-center gap-2 text-slate-900 mb-8 hover:opacity-80 transition-opacity">
               <Building2 className="h-6 w-6 text-primary" />
               <span className="text-2xl font-bold tracking-tight">EduQuiz <span className="font-light text-slate-500">Enterprise</span></span>
-            </div>
+            </a>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-900 mb-2">Admin Portal</h2>
             <p className="text-slate-500">Authenticate to access institutional controls.</p>
           </div>

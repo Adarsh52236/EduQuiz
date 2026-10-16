@@ -207,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(false);
       
       // Redirect to login page and reload
-      window.location.href = '/';
+      window.location.href = '/auth/teacher/sign-in';
     }
   };
 
